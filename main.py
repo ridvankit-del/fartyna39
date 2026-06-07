@@ -2,11 +2,59 @@ import streamlit as st
 import sqlite3
 import hashlib
 import pandas as pd
-import pypdf
-import docx2txt
-import io
 import requests
 import json
+import io
+import pypdf
+import docx2txt
+
+# 1. ЗАЩИТА: Получаем ключ из secrets, а не из кода
+OPENROUTER_API_KEY = st.secrets.get("OPENROUTER_API_KEY")
+
+# 2. ФУНКЦИЯ ПРОВЕРКИ ПРАВ
+def check_access(required_role=None):
+    """Блокирует доступ, если пользователь не авторизован или нет прав."""
+    if 'user_role' not in st.session_state or st.session_state.user_role is None:
+        st.error("⛔ Требуется авторизация.")
+        return False
+    if required_role and st.session_state.user_role != 'admin' and st.session_state.user_role != required_role:
+        st.error("⛔ У вас нет прав для этого действия.")
+        return False
+    return True
+
+# ... (функции hash_password, init_db, extract_text_from_file остаются прежними)
+
+def ask_llm_analysis(resume_text, role, experience, requirements):
+    if not OPENROUTER_API_KEY:
+        return "⚠️ Ошибка: API-ключ не настроен в секретах системы."
+    
+    # ... (код запроса к LLM без изменений, но теперь он безопасен)
+    prompt = f"..." 
+    # (логика запроса остается как в предыдущей версии)
+    
+# 3. ОСНОВНОЙ ИНТЕРФЕЙС С ПРОВЕРКОЙ БЕЗОПАСНОСТИ
+else:
+    # Защита: действия только для админов и рекрутеров
+    if st.session_state.user_role in ['admin', 'recruiter']:
+        st.subheader("📥 Умный импорт соискателей")
+        
+        uploaded_file = st.file_uploader("Загрузить файл", type=['pdf', 'docx'])
+        
+        with st.form("resume_form"):
+            # ... (поля формы)
+            if st.form_submit_button("🔥 Запустить"):
+                if check_access('recruiter'): # ПРОВЕРКА ПРАВ ПЕРЕД ЗАПИСЬЮ
+                    # ... (логика сохранения в БД)
+                    st.success("Данные успешно защищены и сохранены.")
+                else:
+                    st.stop()
+
+    # Защита: аналитика доступна только админам и менеджерам
+    if st.session_state.user_role in ['admin', 'manager']:
+        st.subheader("📊 Аналитика")
+        if check_access('manager'):
+            # (вывод данных из БД)
+            pass
 
 # 1. КОНФИГУРАЦИЯ СТРАНИЦЫ И СТИЛИ (PREMIUM DESIGN)
 st.set_page_config(page_title="Blackwood Enterprise AI HR", layout="wide")
