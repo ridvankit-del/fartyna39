@@ -68,17 +68,6 @@ def ask_llm_analysis(resume_text, role, experience, requirements):
     except: 
         return "Ошибка связи с ИИ"
 
-def calc_score(resume_text, role, experience):
-    cats = JOB_REQUIREMENTS.get(role, {})
-    total = 0
-    details = {}
-    for cat, skills in cats.items():
-        for skill, weight in skills.items():
-            val = weight * 100 if skill.lower() in resume_text.lower() else 0
-            total += val
-            details[f"{cat}: {skill}"] = int(val)
-    return {"total": min(int(total * (1.1 if experience > 2 else 1.0)), 100), "details": details}
-
 # 4. МОДАЛЬНОЕ ОКНО
 @st.dialog("📋 Живой ИИ-Анализ профиля")
 def show_candidate_modal(row):
@@ -108,14 +97,4 @@ if st.session_state.user_role is None:
         else: 
             st.error("Неверные данные")
 else:
-    if st.sidebar.button("Выйти"): 
-        st.session_state.user_role = None
-        st.rerun()
-    
-    st.markdown('<p class="main-title">💼 BLACKWOOD ENTERPRISE</p>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">AI Talent Hub & Кадровое планирование</p>', unsafe_allow_html=True)
-    
-    # МОДУЛЬ 1: Рекрутинг
-    if check_access('recruiter'):
-        st.subheader("📥 Умный импорт соискателей")
-        uploaded_file = st.file_uploader("За
+    if st.sidebar.button
