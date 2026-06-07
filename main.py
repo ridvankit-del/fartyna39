@@ -100,4 +100,25 @@ if st.session_state.user_role is None:
             c = conn.cursor()
             c.execute("SELECT password_hash FROM users WHERE username='admin'")
             admin_data = c.fetchone()
-            if admin_data and hash_password(key) == admin
+            if admin_data and hash_password(key) == admin_data[0]:
+                try:
+                    c.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", (user, hash_password(pwd), role))
+                    conn.commit()
+                    st.success("Сотрудник успешно добавлен в систему!")
+                except:
+                    st.error("Этот логин занят!")
+            else:
+                st.error("Неверный ключ администратора!")
+            conn.close()
+    st.stop()
+
+# 6. ОСНОВНОЙ БИЗНЕС-ИНТЕРФЕЙС
+st.sidebar.write(f"👤 Авторизован: **{st.session_state.user_role.upper()}**")
+if st.sidebar.button("Выйти из системы"):
+    st.session_state.user_role = None
+    st.rerun()
+
+st.title("💼 Система управления талантами Blackwood")
+
+# МОДУЛЬ 1: Загрузка резюме (Рекрутер + Админ)
+if st.session_state.user_role in
