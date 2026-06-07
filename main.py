@@ -1,25 +1,6 @@
-import streamlit as st
-import sqlite3
-import hashlib
-import pandas as pd
-
-# 1. КОНФИГУРАЦИЯ СТРАНИЦЫ И СТИЛИ (PREMIUM DESIGN)
-st.set_page_config(page_title="Blackwood Enterprise AI HR", layout="wide")
-
-st.markdown("""
-    <style>import streamlit as st
-import sqlite3
-import hashlib
-import pandas as pd
-import pypdf
-import docx2txt
-import io
-
-# 1. КОНФИГУРАЦИЯ СТРАНИЦЫ И СТИЛИ (PREMIUM DESIGN)
-st.set_page_config(page_title="Blackwood Enterprise AI HR", layout="wide")
-
 st.markdown("""
     <style>
+        /* Главный заголовок */
         .main-title {
             font-size: 42px !important;
             font-weight: 800 !important;
@@ -33,11 +14,13 @@ st.markdown("""
             color: #666666;
             margin-bottom: 30px;
         }
+        /* Карточки метрик */
         div[data-testid="stMetricSimpleValue"] {
             font-size: 28px !important;
             font-weight: 700 !important;
             color: #111111;
         }
+        /* Брендированные контейнеры-карточки */
         .custom-card {
             background-color: #F9F9FB;
             padding: 20px;
@@ -46,23 +29,15 @@ st.markdown("""
             box-shadow: 0 4px 6px rgba(0,0,0,0.02);
             margin-bottom: 15px;
         }
+        .modal-card {
+            background-color: #F0F2F6;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #E0E0E0;
+            margin-bottom: 10px;
+        }
     </style>
-""", unsafe_allow_html=True)
-
-# 2. РАСШИРЕННАЯ МАТРИЦА КОМПЕТЕНЦИЙ (HH-STYLE)
-JOB_REQUIREMENTS = {
-    "Повар": {
-        "Hard Skills": {"Тех. карты": 0.3, "Санитарные нормы": 0.4, "Работа с грилем": 0.2},
-        "Процессы": {"Скорость": 0.1}
-    },
-    "Шеф-повар": {
-        "Управление": {"Foodcost": 0.5, "Инвентаризация": 0.2, "Управление командой": 0.3}
-    },
-    "Официант": {
-        "Сервис": {"Знание меню": 0.4, "Стандарты сервиса": 0.3},
-        "Продажи": {"Upsell": 0.3}
-    }
-}
+""", unsafe_allow_html=True)}
 
 VACANCIES_LIST = list(JOB_REQUIREMENTS.keys())
 
