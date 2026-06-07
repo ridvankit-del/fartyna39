@@ -125,4 +125,4 @@ if st.session_state.user_role in ['admin', 'recruiter']:
     st.header("📥 Модуль импорта кандидатов")
     with st.form("resume_form"):
         name = st.text_input("ФИО Кандидата")
-        role = st.selectbox("Профильная вакансия", list(
+        role = st.selectbox("Профильная вакансия", list()
