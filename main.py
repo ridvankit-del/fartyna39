@@ -135,7 +135,6 @@ def show_candidate_modal(row, res_details):
 
 # 5. ЭКРАН АВТОРИЗАЦИИ
 if st.session_state.user_role is None:
-    # Заменили на стильный киберпанк/Y2K абстрактный фон вместо скучной столовой
     st.image("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80", use_container_width=True)
     st.markdown('<p class="main-title">🔐 Blackwood HR</p>', unsafe_allow_html=True)
     st.markdown('<p class="subtitle">Вход в корпоративную панель управления талантами</p>', unsafe_allow_html=True)
@@ -179,11 +178,12 @@ if st.session_state.user_role is None:
     st.stop()
 
 # 6. ОСНОВНОЙ БИЗНЕС-ИНТЕРФЕЙС
-# В сайдбар закинули минималистичный темный техно-арт
 st.sidebar.image("https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=300&q=80", use_container_width=True)
 st.sidebar.markdown("### 🏢 Панель управления")
 st.sidebar.write(f"Пользователь: **{st.session_state.user_role.upper()}**")
-if st.sidebar.button("🚪 Выйти из системы", use_container_width=True):
+
+# Добавлен уникальный key для предотвращения сбоя дублирования ID
+if st.sidebar.button("🚪 Выйти из системы", key="sidebar_logout_btn", use_container_width=True):
     st.session_state.user_role = None
     st.rerun()
 
@@ -255,7 +255,6 @@ if st.session_state.user_role in ['admin', 'manager']:
                     col_img, col_main, col_btns = st.columns([1, 4, 2])
                     
                     with col_img:
-                        # Поставили стильный 3D-минималистичный темный аватар вместо яркой мультяшной иконки
                         st.image("https://img.icons8.com/fluent-systems-filled/200/FFFFFF/user-male-circle.png", width=65)
                         
                     with col_main:
@@ -329,7 +328,3 @@ if st.session_state.user_role in ['admin', 'manager']:
                 st.success("✨ Фирменный оффер успешно сформирован:")
                 st.code(offer_text, language="markdown")
             else:
-                st.info("Чтобы сгенерировать оффер, переведите хотя бы одного кандидата в статус 'Оффер' во вкладке CRM.")
-                
-    else:
-        st.info("В коммерческой базе данных пока нет загруженных анкет соискателей.")
