@@ -21,6 +21,9 @@ JOB_REQUIREMENTS = {
     }
 }
 
+# Извлекаем список вакансий в отдельную переменную заранее
+VACANCIES_LIST = list(JOB_REQUIREMENTS.keys())
+
 # 3. ФУНКЦИИ БЕЗОПАСНОСТИ И БД
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -44,7 +47,7 @@ def init_db():
     connection.commit()
     connection.close()
 
-def analyze_candidate_score(resume_text, role, experience):
+def calc_score(resume_text, role, experience):
     categories = JOB_REQUIREMENTS.get(role, {})
     if not categories:
         return {"total": 0, "details": {}}
@@ -125,4 +128,137 @@ if st.session_state.user_role in ['admin', 'recruiter']:
     st.header("📥 Модуль импорта кандидатов")
     with st.form("resume_form"):
         name = st.text_input("ФИО Кандидата")
-        role = st.selectbox("Профильная вакансия", list()
+        role = st.selectbox("Профильная вакансия", VACANCIES_LIST)
+        years = st.number_input("Подтвержденный стаж (лет)", min_value=0, max_value=40, value=0)
+        text = st.text_area("Текстовое содержимое резюме / Ключевые навыки")
+        if st.form_submit_button("Загрузить и запустить ИИ-анализ"):
+            if name and text:
+                conn = sqlite3.connect('talent_hub.db')
+                c = conn.cursor()
+                c.execute("INSERT INTO resumes (name, role, content, status, experience) VALUES (?, ?, ?, ?, ?)", 
+                          (name, role, text, 'Новый', years))
+                conn.commit()
+                conn.close()
+                st.success(f"Кандидат {name} успешно добавлен в воронку со статусом 'Новый'!")
+                st.rerun()
+            else:
+                st.error("Пожалуйста, заполните все поля формы.")
+
+# МОДУЛЬ 2: Коммерческая аналитика и CRM (Менеджер + Админ)
+if st.session_state.user_role in ['admin', 'manager']:
+    st.header("📊 Коммерческий аналитический центр")
+    
+    conn = sqlite3.connect('talent_hub.db')
+    df = pd.read_sql("SELECT * FROM resumes", conn)
+    conn.close()
+    
+    if not df.empty:
+        # Безопасный расчет скоринга в фоне
+        scores = []
+        for _, r in df.iterrows():
+            res_analysis = calc_score(r['content'], r['role'], r['experience'])
+            scores.append(res_analysis['total'])
+        df['Score'] = scores
+        
+        # Разделение интерфейса на вкладки
+        tab_crm, tab_metrics, tab_offers = st.tabs(["🎯 Воронка кандидатов (CRM)", "📈 Бизнес-метрики", "📄 Генератор офферов"])
+        
+        allowed_statuses = ["Новый", "Собеседование", "Оффер", "Отказ"]
+        
+        # ВКЛАДКА 1: Профессиональная воронка
+        with tab_crm:
+            st.subheader("Управление статусами соискателей")
+            status_filter = st.selectbox("Фильтр по этапу воронки", ["Все"] + allowed_statuses)
+            
+            # Нормализуем старые статусы 'new' прямо в DataFrame
+            df['normalized_status'] = df['status'].apply(lambda x: "Новый" if x == "new" else x)
+            
+            if status_filter == "Все":
+                filtered_df = df
+            else:
+                filtered_df = df[df['normalized_status'] == status_filter]
+            
+            for _, row in filtered_df.sort_values(by='Score', ascending=False).iterrows():
+                res_details = calc_score(row['content'], row['role'], row['experience'])
+                current_status = row['normalized_status']
+                
+                with st.expander(f"[{current_status}] {row['name']} — Соответствие: {row['Score']}% (Стаж: {row['experience']} л.)"):
+                    col_info, col_actions = st.columns([2, 1])
+                    
+                    with col_info:
+                        st.write(f"**Резюме:** {row['content']}")
+                        st.write("**Разбивка по компетенциям:**")
+                        for skill, val in res_details['details'].items():
+                            st.write(f"- {skill}: {val}%")
+                            st.progress(val / 100)
+                    
+                    with col_actions:
+                        st.write("**Управление этапом:**")
+                        new_status = st.selectbox(
+                            "Изменить статус на:", 
+                            allowed_statuses, 
+                            key=f"status_select_{row['id']}_{row['name']}", 
+                            index=allowed_statuses.index(current_status)
+                        )
+                        
+                        if st.button("Обновить статус", key=f"status_btn_{row['id']}_{row['name']}"):
+                            conn = sqlite3.connect('talent_hub.db')
+                            c = conn.cursor()
+                            c.execute("UPDATE resumes SET status=? WHERE id=?", (new_status, row['id']))
+                            conn.commit()
+                            conn.close()
+                            st.success("Статус обновлен!")
+                            st.rerun()
+                            
+                        if st.button("🗑️ Удалить соискателя", key=f"del_{row['id']}_{row['name']}"):
+                            conn = sqlite3.connect('talent_hub.db')
+                            conn.execute("DELETE FROM resumes WHERE id=?", (row['id'],))
+                            conn.commit()
+                            conn.close()
+                            st.success("Удалено")
+                            st.rerun()
+        
+        # ВКЛАДКА 2: Финансовые метрики для бизнеса
+        with tab_metrics:
+            st.subheader("Эффективность рекрутинга")
+            col_m1, col_m2, col_m3 = st.columns(3)
+            
+            total_candidates = len(df)
+            offers_count = len(df[df['normalized_status'] == "Оффер"])
+            conversion = round((offers_count / total_candidates) * 100) if total_candidates > 0 else 0
+            estimated_cost = total_candidates * 1200 
+            
+            col_m1.metric("Всего обработано резюме", total_candidates)
+            col_m2.metric("Конверсия воронки в офферы", f"{conversion}%")
+            col_m3.metric("Инвестиции в подбор (угар.)", f"{estimated_cost} ₽", "-12% расходов")
+            
+            st.write("### Распределение кандидатов по уровню соответствия")
+            st.bar_chart(df['Score'])
+            
+        # ВКЛАДКА 3: Генератор предложений о работе (Job Offers)
+        with tab_offers:
+            st.subheader("Автоматическое составление Job Offer")
+            offer_candidates = df[df['normalized_status'] == "Оффер"]
+            
+            if not offer_candidates.empty:
+                selected_candidate = st.selectbox("Выберите кандидата для формирования оффера:", offer_candidates['name'])
+                cand_row = df[df['name'] == selected_candidate].iloc[0]
+                
+                offer_text = f"""
+👋 Уважаемый(а) {cand_row['name']}!
+                
+Команда ресторанной сети Blackwood Enterprise рада пригласить Вас на должность: **{cand_row['role']}**.
+                
+Наш ИИ-ассистент высоко оценил Ваш опыт работы ({cand_row['experience']} л.) и навыки. 
+Мы предлагаем Вам конкурентные условия труда, официальное оформление и гибкий график.
+                
+Ожидаем Вашего ответа в течение 3 рабочих дней.
+С уважением, HR-департамент Blackwood.
+                """
+                st.info("Текст оффера сгенерирован автоматически:")
+                st.code(offer_text, language="markdown")
+            else:
+                st.info("Чтобы сгенерировать оффер, переведите хотя бы одного кандидата в статус 'Оффер' во вкладке CRM.")
+                
+    else:
+        st.info("В коммерческой базе данных пока нет загруженных анкет соискателей.")
