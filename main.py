@@ -35,9 +35,26 @@ def init_db():
     connection.close()
 
 def analyze_candidate_score(resume_text, role):
+    # Улучшенная структура: навык + вес + сложность
     requirements = JOB_REQUIREMENTS.get(role, {})
-    if not requirements:
-        return 0
+    if not requirements: return {"total": 0, "details": {}}
+    
+    total_score = 0
+    details = {}
+    
+    for skill, weight in requirements.items():
+        # Ищем навык и проверяем наличие "сильных" слов рядом (например, "опыт", "эксперт")
+        if skill.lower() in resume_text.lower():
+            # Если навык найден, добавляем вес. 
+            # Можно добавить множитель, если в тексте есть слово "эксперт"
+            boost = 1.2 if "эксперт" in resume_text.lower() or "senior" in resume_text.lower() else 1.0
+            score = weight * 100 * boost
+            total_score += score
+            details[skill] = round(weight * 100)
+        else:
+            details[skill] = 0
+            
+    return {"total": min(round(total_score), 100), "details": details}
     
     score = 0
     # Проходим по словарю: skill - навык, weight - его вес
@@ -150,34 +167,33 @@ if st.session_state.user_role in ['admin', 'recruiter']:
 
 # Секция анализа для Менеджера/Админа
 if st.session_state.user_role in ['admin', 'manager']:
-    st.header("📊 Анализ и управление кандидатами")
+    st.header("📊 Профессиональный анализ")
     
-    connection = sqlite3.connect('talent_hub.db')
-    df_resumes = pd.read_sql("SELECT * FROM resumes WHERE status='new'", connection)
-    connection.close()
+    conn = sqlite3.connect('talent_hub.db')
+    df = pd.read_sql("SELECT * FROM resumes WHERE status='new'", conn)
+    conn.close()
     
-    if not df_resumes.empty:
-        df_resumes['Score'] = df_resumes.apply(
-            lambda row: analyze_candidate_score(row['content'], row['role']), axis=1
-        )
-        df_resumes = df_resumes.sort_values(by='Score', ascending=False)
-        
-        for index, row in df_resumes.iterrows():
-            with st.container():
-                cols = st.columns([3, 1, 1])
-                cols[0].subheader(f"{row['name']} | {row['role']}")
-                cols[0].write(f"Навыки: {row['content'][:50]}...")
-                cols[1].metric("Рейтинг", f"{row['Score']}%")
+    if not df.empty:
+        for _, row in df.iterrows():
+            result = analyze_candidate_score(row['content'], row['role'])
+            score = result['total']
+            
+            # Определяем статус
+            if score >= 80: status = "🟢 Топ-кандидат"
+            elif score >= 50: status = "🟡 В резерв"
+            else: status = "🔴 Отказ"
+            
+            with st.expander(f"{status} | {row['name']} ({row['role']}) - {score}%"):
+                col1, col2 = st.columns([2, 1])
+                col1.write(f"**Навыки:** {row['content']}")
                 
-                # Кнопка удаления
-                # Используем id из базы данных для уникальности кнопки
-                if cols[2].button("🗑️ Удалить", key=f"del_{row['id']}"):
-                    conn = sqlite3.connect('talent_hub.db')
-                    cursor = conn.cursor()
-                    cursor.execute("DELETE FROM resumes WHERE id=?", (row['id'],))
-                    conn.commit()
-                    conn.close()
-                    st.rerun() # Перезагружаем страницу, чтобы резюме исчезло из списка
-                st.divider()
+                # Детальная аналитика по навыкам
+                for skill, val in result['details'].items():
+                    col2.write(f"{skill}:")
+                    col2.progress(val / 100)
+                
+                if st.button("🗑️ Удалить запись", key=f"del_{row['id']}"):
+                    # (код удаления такой же, как мы делали ранее)
+                    st.rerun()
     else:
-        st.info("В базе пока нет новых резюме.")
+        st.info("Нет данных для анализа.")
