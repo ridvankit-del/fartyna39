@@ -1,3 +1,4 @@
 pypdf
 docx2txt
 pandas
+requests
