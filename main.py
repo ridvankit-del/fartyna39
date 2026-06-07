@@ -1,50 +1,42 @@
 import streamlit as st
+import sqlite3
+import bcrypt
 
-# 1. Инициализация системы прав
-if 'user_role' not in st.session_state:
-    st.session_state.user_role = None  # None, 'admin', 'manager', 'recruiter'
+# --- ИНИЦИАЛИЗАЦИЯ БД ---
+def init_db():
+    conn = sqlite3.connect('talent_hub.db')
+    c = conn.cursor()
+    # Таблица пользователей (с хэшами паролей)
+    c.execute('''CREATE TABLE IF NOT EXISTS users 
+                 (username TEXT PRIMARY KEY, password_hash TEXT, role TEXT)''')
+    # Таблица резюме
+    c.execute('''CREATE TABLE IF NOT EXISTS resumes 
+                 (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT)''')
+    conn.commit()
+    conn.close()
 
-def login():
-    st.title("🔐 Авторизация в системе Blackwood")
-    role = st.selectbox("Выберите роль:", ["Директор", "Проверяющий", "Рекрутер"])
-    password = st.text_input("Пароль", type="password")
-    
-    if st.button("Войти"):
-        # Упрощенная проверка паролей (в реальном проекте - через хэширование)
-        if password == "admin123": st.session_state.user_role = 'admin'
-        elif password == "mgr123": st.session_state.user_role = 'manager'
-        elif password == "rec123": st.session_state.user_role = 'recruiter'
-        else: st.error("Неверный пароль")
-        st.rerun()
+# --- ЛОГИКА ПАРОЛЕЙ ---
+def verify_password(password, hashed):
+    return bcrypt.checkpw(password.encode(), hashed)
 
-# 2. Логика интерфейса по ролям
-if st.session_state.user_role is None:
-    login()
-else:
-    # Сайдбар с данными пользователя
-    with st.sidebar:
-        st.write(f"👤 Роль: **{st.session_state.user_role}**")
-        if st.button("Выйти"):
-            st.session_state.user_role = None
-            st.rerun()
+# --- ИНТЕРФЕЙС УПРАВЛЕНИЯ ---
+st.set_page_config(page_title="Blackwood Secure Core")
 
-    # Разграничение доступа
-    role = st.session_state.user_role
+init_db()
 
-    if role == 'recruiter':
-        st.title("📥 Подача резюме")
-        st.write("Минимальный доступ: только форма загрузки.")
-        # [Только форма загрузки...]
+# Пример входа с проверкой БД
+st.title("🔐 Авторизация")
+user = st.text_input("Логин")
+pwd = st.text_input("Пароль", type="password")
 
-    elif role == 'manager':
-        st.title("🧐 Панель проверяющего")
-        st.write("Доступ к черновикам и проведение скоринга.")
-        # [Интерфейс черновиков и переноса в базу...]
-
-    elif role == 'admin':
-        st.title("👑 Панель управления (Директор)")
-        st.write("Полный контроль над всей базой талантов.")
-        st.checkbox("Показывать конфиденциальную статистику")
-        # [Весь функционал...]
-
-#
+if st.button("Войти"):
+    conn = sqlite3.connect('talent_hub.db')
+    c = conn.cursor()
+    c.execute("SELECT password_hash, role FROM users WHERE username=?", (user,))
+    data = c.fetchone()
+    if data and verify_password(pwd, data[0]):
+        st.session_state.user_role = data[1]
+        st.success("Доступ разрешен")
+    else:
+        st.error("Неверные данные")
+    conn.close()
