@@ -109,4 +109,25 @@ def calc_score(resume_text, role, experience):
     else: exp_multiplier = 1.0
     
     total_score = min(round(total_score * exp_multiplier), 100)
+    
+    # Вот эта строка, здесь должны быть фигурные скобки словаря:
+    return {"total": total_score, "details": details}
+    
+    total_score = 0
+    details = {}
+    
+    for cat_name, skills in categories.items():
+        for skill, weight in skills.items():
+            if skill.lower() in resume_text.lower():
+                total_score += weight * 100
+                details[f"{cat_name}: {skill}"] = round(weight * 100)
+            else:
+                details[f"{cat_name}: {skill}"] = 0
+            
+    # Коэффициенты за подтвержденный стаж работы
+    if experience >= 5: exp_multiplier = 1.3
+    elif experience >= 2: exp_multiplier = 1.1
+    else: exp_multiplier = 1.0
+    
+    total_score = min(round(total_score * exp_multiplier), 100)
     return "total": total
