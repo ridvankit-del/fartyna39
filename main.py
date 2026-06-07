@@ -2,28 +2,35 @@ import streamlit as st
 import sqlite3
 import hashlib
 
-# 1. Сначала КОНФИГУРАЦИЯ страницы
+# 1. КОНФИГУРАЦИЯ СТРАНИЦЫ
 st.set_page_config(page_title="Blackwood HR System", layout="wide")
 
-# 2. ИНИЦИАЛИЗАЦИЯ базы данных
+# 2. ИНИЦИАЛИЗАЦИЯ БД (Функции)
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
 def init_db():
-    # ... (твоя функция инициализации)
-    pass
+    conn = sqlite3.connect('talent_hub.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password_hash TEXT, role TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS resumes (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT)''')
+    # Авто-создание админа, если пусто
+    c.execute("SELECT * FROM users WHERE username='admin'")
+    if not c.fetchone():
+        c.execute("INSERT INTO users VALUES (?, ?, ?)", ("admin", hash_password("admin123"), "admin"))
+    conn.commit()
+    conn.close()
 
 init_db()
 
-# 3. ТОЛЬКО ПОСЛЕ ЭТОГО инициализация session_state
+# 3. УПРАВЛЕНИЕ СОСТОЯНИЕМ
 if 'user_role' not in st.session_state:
     st.session_state.user_role = None
 
-# 4. И ТОЛЬКО ПОСЛЕ ВСЕГО ЭТОГО проверка
-if st.session_state.user_role is None:
-    # ... (логика входа)# --- 3. АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ (СМЕННАЯ ПОЗИЦИЯ) ---
+# 4. АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ
 if st.session_state.user_role is None:
     st.title("🔐 Blackwood Access Portal")
-    
-    # Выбор режима
-    mode = st.radio("Выберите действие:", ["Вход", "Регистрация (только админом)"], horizontal=True)
+    mode = st.radio("Выберите действие:", ["Вход", "Регистрация (через админа)"], horizontal=True)
     
     user = st.text_input("Логин")
     pwd = st.text_input("Пароль", type="password")
@@ -37,29 +44,54 @@ if st.session_state.user_role is None:
             if data and hash_password(pwd) == data[0]:
                 st.session_state.user_role = data[1]
                 st.rerun()
-            else:
-                st.error("Неверные данные")
+            else: st.error("Неверные данные")
             conn.close()
-            
-    else: # Режим регистрации
-        admin_key = st.text_input("Ключ администратора", type="password")
+    else:
+        admin_key = st.text_input("Ключ администратора (пароль админа)", type="password")
         role = st.selectbox("Роль для нового пользователя", ["manager", "recruiter"])
-        
         if st.button("Зарегистрироваться"):
-            # Проверка администратора (регистрация только через верный пароль админа)
             conn = sqlite3.connect('talent_hub.db')
             c = conn.cursor()
             c.execute("SELECT password_hash FROM users WHERE username='admin'")
             admin_data = c.fetchone()
-            
             if admin_data and hash_password(admin_key) == admin_data[0]:
                 try:
                     c.execute("INSERT INTO users VALUES (?, ?, ?)", (user, hash_password(pwd), role))
                     conn.commit()
-                    st.success("Пользователь успешно создан!")
-                except:
-                    st.error("Логин уже занят.")
-            else:
-                st.error("Неверный ключ администратора!")
+                    st.success("Пользователь создан!")
+                except: st.error("Логин занят.")
+            else: st.error("Неверный ключ админа!")
             conn.close()
+    st.stop()
+
+# 5. ОСНОВНОЙ ИНТЕРФЕЙС (после входа)
+st.sidebar.write(f"👤 Роль: **{st.session_state.user_role.upper()}**")
+if st.sidebar.button("Выйти"):
+    st.session_state.user_role = None
+    st.rerun()
+
+st.title(f"💼 Панель {st.session_state.user_role.upper()}")
+
+# Логика по ролям
+if st.session_state.user_role in ['admin', 'recruiter']:
+    st.subheader("📥 Загрузка резюме")
+    with st.form("resume_form"):
+        name = st.text_input("Имя кандидата")
+        role = st.selectbox("Должность", ["Повар", "Су-шеф", "Шеф-повар", "Менеджер", "Хостес", "Официант"])
+        text = st.text_area("Описание/Резюме")
+        if st.form_submit_button("Отправить"):
+            conn = sqlite3.connect('talent_hub.db')
+            c = conn.cursor()
+            c.execute("INSERT INTO resumes (name, role, content, status) VALUES (?, ?, ?, ?)", (name, role, text, 'new'))
+            conn.commit()
+            conn.close()
+            st.success("Отправлено!")
+
+if st.session_state.user_role in ['admin', 'manager']:
+    st.subheader("🔍 Очередь на проверку")
+    conn = sqlite3.connect('talent_hub.db')
+    import pandas as pd
+    df = pd.read_sql("SELECT * FROM resumes WHERE status='new'", conn)
+    st.table(df)
+    conn.close()            conn.close()
     st.stop()
