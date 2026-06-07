@@ -83,9 +83,9 @@ if "last_request_time" not in st.session_state:
 
 def check_rate_limit():
     current_time = time.time()
-    if current_time - st.session_state.last_request_time < 0.3:
-        st.warning("⚠️ Слишком много запросов!")
-        st.stop()
+    # Убрали st.stop() и агрессивный алерт. 
+    # Теперь при быстром перетаскивании ползунков система просто обновляет время,
+    # не обрывая рендеринг графиков и интерфейса.
     st.session_state.last_request_time = current_time
 
 # Математические модели
