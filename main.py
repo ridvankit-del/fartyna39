@@ -39,7 +39,7 @@ def predict_housing(size, distance):
 
 # 2. ДИЗАЙН БОКОВОЙ ПАНЕЛИ
 with st.sidebar:
-    st.markup("<h2 style='text-align: center; color: #ff4b4b;'>🎮 CONTROL PANEL</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #ff4b4b;'>🎮 CONTROL PANEL</h2>", unsafe_allow_html=True)
     st.write("---")
     
     app_mode = st.selectbox(
