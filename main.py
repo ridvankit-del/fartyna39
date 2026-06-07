@@ -150,26 +150,34 @@ if st.session_state.user_role in ['admin', 'recruiter']:
 
 # Секция анализа для Менеджера/Админа
 if st.session_state.user_role in ['admin', 'manager']:
-    st.header("📊 Автоматический анализ кандидатов")
+    st.header("📊 Анализ и управление кандидатами")
     
     connection = sqlite3.connect('talent_hub.db')
     df_resumes = pd.read_sql("SELECT * FROM resumes WHERE status='new'", connection)
     connection.close()
     
     if not df_resumes.empty:
-        # Применяем функцию анализа ко всем строкам
         df_resumes['Score'] = df_resumes.apply(
             lambda row: analyze_candidate_score(row['content'], row['role']), axis=1
         )
-        # Сортировка по рейтингу
         df_resumes = df_resumes.sort_values(by='Score', ascending=False)
         
         for index, row in df_resumes.iterrows():
             with st.container():
-                cols = st.columns([3, 1])
-                cols[0].subheader(f"{row['name']} — {row['role']}")
-                cols[0].write(f"**Текст резюме:** {row['content']}")
-                cols[1].metric(label="Соответствие вакансии", value=f"{row['Score']}%")
+                cols = st.columns([3, 1, 1])
+                cols[0].subheader(f"{row['name']} | {row['role']}")
+                cols[0].write(f"Навыки: {row['content'][:50]}...")
+                cols[1].metric("Рейтинг", f"{row['Score']}%")
+                
+                # Кнопка удаления
+                # Используем id из базы данных для уникальности кнопки
+                if cols[2].button("🗑️ Удалить", key=f"del_{row['id']}"):
+                    conn = sqlite3.connect('talent_hub.db')
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM resumes WHERE id=?", (row['id'],))
+                    conn.commit()
+                    conn.close()
+                    st.rerun() # Перезагружаем страницу, чтобы резюме исчезло из списка
                 st.divider()
     else:
-        st.info("В базе пока нет новых резюме для анализа.")
+        st.info("В базе пока нет новых резюме.")
