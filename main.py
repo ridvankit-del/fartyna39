@@ -10,16 +10,15 @@ st.set_page_config(page_title="Blackwood AI HR", layout="wide")
 # Расширенная матрица компетенций
 JOB_REQUIREMENTS = {
     "Повар": {
-        "Hard Skills": {"Тех. карты": 0.3, "Санитарные нормы": 0.3, "Работа с грилем": 0.2},
-        "Процессы": {"Скорость отдачи": 0.1, "Заготовка": 0.1}
+        "Hard Skills": {"Тех. карты": 0.3, "Санитарные нормы": 0.4, "Работа с грилем": 0.2},
+        "Процессы": {"Скорость": 0.1}
     },
     "Шеф-повар": {
-        "Управление": {"Foodcost": 0.3, "Инвентаризация": 0.2, "Управление командой": 0.2},
-        "Развитие": {"Разработка меню": 0.2, "Бюджетирование": 0.1}
+        "Управление": {"Foodcost": 0.5, "Инвентаризация": 0.2, "Управление командой": 0.3}
     },
     "Официант": {
-        "Сервис": {"Знание меню": 0.3, "Стандарты сервиса": 0.3, "Работа с POS": 0.2},
-        "Продажи": {"Upsell": 0.2}
+        "Сервис": {"Знание меню": 0.4, "Стандарты сервиса": 0.3},
+        "Продажи": {"Upsell": 0.3}
     }
 }
 
@@ -51,25 +50,29 @@ def init_db():
     connection.close()
 
 def analyze_candidate_score(resume_text, role, experience):
-    requirements = JOB_REQUIREMENTS.get(role, {})
-    if not requirements:
+    categories = JOB_REQUIREMENTS.get(role, {})
+    if not categories:
         return {"total": 0, "details": {}}
     
-    base_score = 0
+    total_score = 0
     details = {}
-    for skill, weight in requirements.items():
-        if skill.lower() in resume_text.lower():
-            base_score += weight * 100
-            details[skill] = round(weight * 100)
-        else:
-            details[skill] = 0
-            
-    if experience >= 5: exp_multiplier = 1.3
-    elif experience >= 2: exp_multiplier = 1.1
-    else: exp_multiplier = 1.0
     
-    total_score = min(round(base_score * exp_multiplier), 100)
-    return {"total": total_score, "details": details}
+    # Теперь мы перебираем категории
+    for cat_name, skills in categories.items():
+        # Перебираем навыки внутри категории
+        for skill, weight in skills.items():
+            if skill.lower() in resume_text.lower():
+                # weight здесь — это число (например, 0.3)
+                total_score += weight * 100
+                details[f"{cat_name}: {skill}"] = round(weight * 100)
+            else:
+                details[f"{cat_name}: {skill}"] = 0
+    
+    # Расчет с учетом стажа
+    exp_multiplier = 1.3 if experience >= 5 else (1.1 if experience >= 2 else 1.0)
+    final_score = min(round(total_score * exp_multiplier), 100)
+    
+    return {"total": final_score, "details": details}
 
 init_db()
 
