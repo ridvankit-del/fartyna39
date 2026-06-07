@@ -103,4 +103,4 @@ def calc_score(resume_text, role, experience):
             
     if experience >= 5: exp_multiplier = 1.3
     elif experience >= 2: exp_multiplier = 1.1
-    else: exp_multiplier = 1.
+    else: exp_multiplier
