@@ -149,21 +149,19 @@ st.title(f"💼 Панель {st.session_state.user_role.upper()}")
 # Секция загрузки резюме
 if st.session_state.user_role in ['admin', 'recruiter']:
     st.header("📥 Добавление нового резюме")
-    with st.form("resume_upload_form"):
-        candidate_name = st.text_input("Имя кандидата:")
-        candidate_role = st.selectbox("Выберите вакансию:", list(JOB_REQUIREMENTS.keys()))
-        candidate_content = st.text_area("Введите навыки кандидата через запятую или описание:")
-        
-        submit_button = st.form_submit_button("Добавить кандидата в базу")
-        
-        if submit_button:
-            connection = sqlite3.connect('talent_hub.db')
-            cursor = connection.cursor()
-            cursor.execute("INSERT INTO resumes (name, role, content, status) VALUES (?, ?, ?, ?)", 
-                           (candidate_name, candidate_role, candidate_content, 'new'))
-            connection.commit()
-            connection.close()
-            st.success(f"Кандидат {candidate_name} добавлен и отправлен на анализ!")
+    with st.form("resume_form"):
+    name = st.text_input("Имя кандидата")
+    role = st.selectbox("Должность", list(JOB_REQUIREMENTS.keys()))
+    years = st.number_input("Стаж работы (лет)", min_value=0, max_value=40, value=1) # НОВОЕ
+    text = st.text_area("Описание навыков")
+    if st.form_submit_button("Добавить"):
+        conn = sqlite3.connect('talent_hub.db')
+        c = conn.cursor()
+        # Добавляем years в запрос
+        c.execute("INSERT INTO resumes (name, role, content, status, experience) VALUES (?, ?, ?, ?, ?)", 
+                  (name, role, text, 'new', years))
+        conn.commit()
+        conn.close()
 
 # Секция анализа для Менеджера/Админа
 if st.session_state.user_role in ['admin', 'manager']:
