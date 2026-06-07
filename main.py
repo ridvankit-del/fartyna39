@@ -11,18 +11,22 @@ PROFESSION_CRITERIA = {
     "Официант": ["Знание меню", "Upsell (продажи)", "Сервис", "Работа с POS-системами"]
 }
 
-# Инициализация базы
+# 2. БЕЗОПАСНАЯ ИНИЦИАЛИЗАЦИЯ
 if 'talent_db' not in st.session_state:
     st.session_state.talent_db = {prof: [] for prof in PROFESSION_CRITERIA.keys()}
 
-st.set_page_config(page_title="Blackwood Restaurant Talent", layout="wide")
+st.set_page_config(page_title="Blackwood Talent Hub", layout="wide")
 
 st.title("👨‍🍳 BLACKWOOD RESTAURANT TALENT HUB")
 
-# 2. БОКОВАЯ ПАНЕЛЬ (Выбор и Добавление)
+# 3. БОКОВАЯ ПАНЕЛЬ
 with st.sidebar:
     selected_prof = st.selectbox("Выберите категорию:", list(PROFESSION_CRITERIA.keys()))
     
+    # Гарантируем наличие ключа, если вдруг список профессий изменится динамически
+    if selected_prof not in st.session_state.talent_db:
+        st.session_state.talent_db[selected_prof] = []
+        
     st.divider()
     st.subheader("📥 Новый кандидат")
     with st.form("add_cand"):
@@ -30,34 +34,38 @@ with st.sidebar:
         exp_years = st.number_input("Стаж (лет)", 0, 30)
         skills_input = st.text_area("Ключевые навыки (через запятую)")
         if st.form_submit_button("Добавить"):
-            st.session_state.talent_db[selected_prof].append({
+            new_entry = {
                 "Имя": name, 
                 "Стаж": exp_years, 
                 "Навыки": [s.strip() for s in skills_input.split(',')]
-            })
-            st.success("Добавлено")
+            }
+            st.session_state.talent_db[selected_prof].append(new_entry)
+            st.success(f"Кандидат {name} добавлен!")
 
-# 3. ОСНОВНАЯ ОБЛАСТЬ (Сравнительный анализ)
+# 4. ОСНОВНАЯ ОБЛАСТЬ (БЕЗОПАСНЫЙ ВЫВОД)
 st.subheader(f"Кандидаты: {selected_prof}")
-candidates = st.session_state.talent_db[selected_prof]
 
-if candidates:
+# Используем .get() для предотвращения KeyError
+candidates = st.session_state.talent_db.get(selected_prof, [])
+
+if not candidates:
+    st.info("В этой категории пока нет резюме. Добавьте первого кандидата через боковую панель.")
+else:
     for cand in candidates:
         with st.container(border=True):
             col1, col2, col3 = st.columns([2, 1, 1])
             col1.write(f"### {cand['Имя']} (Стаж: {cand['Стаж']} лет)")
             
-            # Логика AI-оценки соответствия
-            required_skills = PROFESSION_CRITERIA[selected_prof]
+            # Логика AI-оценки
+            required_skills = PROFESSION_CRITERIA.get(selected_prof, [])
             matches = [s for s in cand['Навыки'] if s in required_skills]
-            score = (len(matches) / len(required_skills)) * 100
+            
+            score = (len(matches) / len(required_skills) * 100) if required_skills else 0
             
             col2.metric("Соответствие", f"{score:.0f}%")
             if score > 70:
                 col3.success("РЕКОМЕНДОВАН")
             else:
-                col3.warning("ТРЕБУЕТ ДОП. ПРОВЕРКИ")
+                col3.warning("ТРЕБУЕТ ПРОВЕРКИ")
             
-            st.write(f"**Сильные стороны:** {', '.join(matches)}")
-else:
-    st.info("Добавьте кандидатов в текущую категорию через боковую панель.")
+            st.write(f"**Сильные стороны:** {', '.join(matches) if matches else 'Навыки не определены'}")
