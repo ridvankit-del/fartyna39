@@ -3,111 +3,164 @@ import sqlite3
 import hashlib
 import pandas as pd
 
-# 1. КОНФИГУРАЦИЯ
+# 1. КОНФИГУРАЦИЯ СТРАНИЦЫ
 st.set_page_config(page_title="Blackwood AI HR", layout="wide")
 
-# 2. НАСТРОЙКИ AI
+# 2. НАСТРОЙКИ AI - СПИСОК НАВЫКОВ
 JOB_REQUIREMENTS = {
     "Повар": ["Тех. карты", "Санитарные нормы", "Работа с грилем", "Скорость"],
     "Шеф-повар": ["Foodcost", "Разработка меню", "Управление командой", "Бюджетирование"],
     "Официант": ["Знание меню", "Upsell", "Сервис", "POS"]
 }
 
-# 3. ФУНКЦИИ
+# 3. ФУНКЦИИ БЕЗОПАСНОСТИ И БД
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 def init_db():
-    conn = sqlite3.connect('talent_hub.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password_hash TEXT, role TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS resumes (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT)''')
-    c.execute("SELECT * FROM users WHERE username='admin'")
-    if not c.fetchone():
-        c.execute("INSERT INTO users VALUES (?, ?, ?)", ("admin", hash_password("admin123"), "admin"))
-    conn.commit()
-    conn.close()
+    connection = sqlite3.connect('talent_hub.db')
+    cursor = connection.cursor()
+    # Создаем таблицы
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password_hash TEXT, role TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS resumes (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT)''')
+    
+    # ПРИНУДИТЕЛЬНЫЙ СБРОС АДМИНА (Если есть проблемы со входом)
+    admin_password_hash = hash_password("admin123")
+    cursor.execute("INSERT OR REPLACE INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
+                   ("admin", admin_password_hash, "admin"))
+    
+    connection.commit()
+    connection.close()
 
-def analyze_candidate(resume_text, role):
-    required = JOB_REQUIREMENTS.get(role, [])
-    if not required: return 0
-    score = sum(1 for skill in required if skill.lower() in resume_text.lower())
-    return round((score / len(required)) * 100)
+def analyze_candidate_score(resume_text, role):
+    # Получаем требования для конкретной роли
+    required_skills = JOB_REQUIREMENTS.get(role, [])
+    if not required_skills:
+        return 0
+    
+    # Подсчитываем наличие ключевых слов в тексте
+    found_count = 0
+    for skill in required_skills:
+        if skill.lower() in resume_text.lower():
+            found_count += 1
+            
+    # Вычисляем процент соответствия
+    score = (found_count / len(required_skills)) * 100
+    return round(score)
 
+# Инициализируем базу при каждом запуске
 init_db()
 
-# 4. СОСТОЯНИЕ
-if 'user_role' not in st.session_state: st.session_state.user_role = None
+# 4. СОСТОЯНИЕ СЕССИИ
+if 'user_role' not in st.session_state:
+    st.session_state.user_role = None
 
-# 5. АВТОРИЗАЦИЯ
+# 5. ЭКРАН АВТОРИЗАЦИИ
 if st.session_state.user_role is None:
-    st.title("🔐 Вход в систему")
-    mode = st.radio("Режим:", ["Вход", "Регистрация"], horizontal=True)
-    user = st.text_input("Логин")
-    pwd = st.text_input("Пароль", type="password")
+    st.title("🔐 Вход в систему управления персоналом")
+    
+    mode = st.radio("Выберите режим:", ["Вход", "Регистрация нового пользователя"], horizontal=True)
+    
+    input_user = st.text_input("Введите логин:")
+    input_password = st.text_input("Введите пароль:", type="password")
     
     if mode == "Вход":
-        if st.button("Войти"):
-            conn = sqlite3.connect('talent_hub.db')
-            c = conn.cursor()
-            c.execute("SELECT password_hash, role FROM users WHERE username=?", (user,))
-            data = c.fetchone()
-            if data and hash_password(pwd) == data[0]:
-                st.session_state.user_role = data[1]
-                st.rerun()
-            else: st.error("Неверные данные")
-            conn.close()
-    else:
-        key = st.text_input("Ключ администратора", type="password")
-        role = st.selectbox("Роль для нового пользователя", ["manager", "recruiter"])
-        if st.button("Зарегистрироваться"):
-            conn = sqlite3.connect('talent_hub.db')
-            c = conn.cursor()
-            c.execute("SELECT password_hash FROM users WHERE username='admin'")
-            admin_data = c.fetchone()
-            if admin_data and hash_password(key) == admin_data[0]:
+        if st.button("Войти в систему"):
+            connection = sqlite3.connect('talent_hub.db')
+            cursor = connection.cursor()
+            cursor.execute("SELECT password_hash, role FROM users WHERE username=?", (input_user,))
+            user_data = cursor.fetchone()
+            
+            if user_data:
+                stored_hash = user_data[0]
+                role = user_data[1]
+                
+                if hash_password(input_password) == stored_hash:
+                    st.session_state.user_role = role
+                    connection.close()
+                    st.rerun()
+                else:
+                    st.error("Ошибка: Неверный пароль.")
+            else:
+                st.error("Ошибка: Пользователь не найден.")
+            connection.close()
+            
+    else: # Режим регистрации
+        admin_key = st.text_input("Ключ администратора (пароль админа):", type="password")
+        new_role = st.selectbox("Выберите роль для нового сотрудника:", ["manager", "recruiter"])
+        
+        if st.button("Зарегистрировать пользователя"):
+            connection = sqlite3.connect('talent_hub.db')
+            cursor = connection.cursor()
+            
+            # Проверяем пароль админа для права на регистрацию
+            cursor.execute("SELECT password_hash FROM users WHERE username='admin'")
+            admin_data = cursor.fetchone()
+            
+            if admin_data and hash_password(admin_key) == admin_data[0]:
                 try:
-                    c.execute("INSERT INTO users VALUES (?, ?, ?)", (user, hash_password(pwd), role))
-                    conn.commit()
-                    st.success("Пользователь создан!")
-                except: st.error("Логин уже занят.")
-            else: st.error("Неверный ключ администратора!")
-            conn.close()
+                    cursor.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
+                                   (input_user, hash_password(input_password), new_role))
+                    connection.commit()
+                    st.success(f"Пользователь {input_user} успешно зарегистрирован!")
+                except sqlite3.IntegrityError:
+                    st.error("Ошибка: Такой логин уже существует в системе.")
+            else:
+                st.error("Ошибка: Неверный ключ администратора.")
+            connection.close()
+    
     st.stop()
 
-# 6. ОСНОВНОЙ ИНТЕРФЕЙС
-st.sidebar.write(f"👤 Роль: **{st.session_state.user_role.upper()}**")
-if st.sidebar.button("Выйти"):
+# 6. ОСНОВНОЙ ИНТЕРФЕЙС (после входа)
+st.sidebar.title("Панель управления")
+st.sidebar.write(f"Текущая роль: **{st.session_state.user_role.upper()}**")
+if st.sidebar.button("Выйти из системы"):
     st.session_state.user_role = None
     st.rerun()
 
-st.title(f"💼 Панель: {st.session_state.user_role.upper()}")
+st.title(f"💼 Панель {st.session_state.user_role.upper()}")
 
+# Секция загрузки резюме
 if st.session_state.user_role in ['admin', 'recruiter']:
-    st.subheader("📥 Загрузка резюме")
-    with st.form("resume_form"):
-        name = st.text_input("Имя кандидата")
-        role = st.selectbox("Должность", list(JOB_REQUIREMENTS.keys()))
-        text = st.text_area("Описание навыков")
-        if st.form_submit_button("Добавить"):
-            conn = sqlite3.connect('talent_hub.db')
-            c = conn.cursor()
-            c.execute("INSERT INTO resumes (name, role, content, status) VALUES (?, ?, ?, ?)", (name, role, text, 'new'))
-            conn.commit()
-            conn.close()
-            st.success("Кандидат добавлен!")
+    st.header("📥 Добавление нового резюме")
+    with st.form("resume_upload_form"):
+        candidate_name = st.text_input("Имя кандидата:")
+        candidate_role = st.selectbox("Выберите вакансию:", list(JOB_REQUIREMENTS.keys()))
+        candidate_content = st.text_area("Введите навыки кандидата через запятую или описание:")
+        
+        submit_button = st.form_submit_button("Добавить кандидата в базу")
+        
+        if submit_button:
+            connection = sqlite3.connect('talent_hub.db')
+            cursor = connection.cursor()
+            cursor.execute("INSERT INTO resumes (name, role, content, status) VALUES (?, ?, ?, ?)", 
+                           (candidate_name, candidate_role, candidate_content, 'new'))
+            connection.commit()
+            connection.close()
+            st.success(f"Кандидат {candidate_name} добавлен и отправлен на анализ!")
 
+# Секция анализа для Менеджера/Админа
 if st.session_state.user_role in ['admin', 'manager']:
-    st.subheader("📊 Анализ кандидатов")
-    conn = sqlite3.connect('talent_hub.db')
-    df = pd.read_sql("SELECT * FROM resumes WHERE status='new'", conn)
-    conn.close()
-    if not df.empty:
-        df['Score'] = df.apply(lambda x: analyze_candidate(x['content'], x['role']), axis=1)
-        df = df.sort_values(by='Score', ascending=False)
-        for _, row in df.iterrows():
-            col1, col2 = st.columns([3, 1])
-            col1.write(f"### {row['name']} | {row['role']}")
-            col1.write(f"Навыки: {row['content'][:50]}...")
-            col2.metric("Рейтинг", f"{row['Score']}%")
-            st.divider()
+    st.header("📊 Автоматический анализ кандидатов")
+    
+    connection = sqlite3.connect('talent_hub.db')
+    df_resumes = pd.read_sql("SELECT * FROM resumes WHERE status='new'", connection)
+    connection.close()
+    
+    if not df_resumes.empty:
+        # Применяем функцию анализа ко всем строкам
+        df_resumes['Score'] = df_resumes.apply(
+            lambda row: analyze_candidate_score(row['content'], row['role']), axis=1
+        )
+        # Сортировка по рейтингу
+        df_resumes = df_resumes.sort_values(by='Score', ascending=False)
+        
+        for index, row in df_resumes.iterrows():
+            with st.container():
+                cols = st.columns([3, 1])
+                cols[0].subheader(f"{row['name']} — {row['role']}")
+                cols[0].write(f"**Текст резюме:** {row['content']}")
+                cols[1].metric(label="Соответствие вакансии", value=f"{row['Score']}%")
+                st.divider()
+    else:
+        st.info("В базе пока нет новых резюме для анализа.")
