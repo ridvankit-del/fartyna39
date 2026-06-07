@@ -121,4 +121,8 @@ if st.sidebar.button("Выйти из системы"):
 st.title("💼 Система управления талантами Blackwood")
 
 # МОДУЛЬ 1: Загрузка резюме (Рекрутер + Админ)
-if st.session_state.user_role in
+if st.session_state.user_role in ['admin', 'recruiter']:
+    st.header("📥 Модуль импорта кандидатов")
+    with st.form("resume_form"):
+        name = st.text_input("ФИО Кандидата")
+        role = st.selectbox("Профильная вакансия", list(
