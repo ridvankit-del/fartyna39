@@ -20,10 +20,12 @@ def hash_password(password):
 def init_db():
     connection = sqlite3.connect('talent_hub.db')
     cursor = connection.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password_hash TEXT, role TEXT)''')
-    # Добавляем колонку experience
     cursor.execute('''CREATE TABLE IF NOT EXISTS resumes 
-                      (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT, experience INTEGER)''')
+                  (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT, experience INTEGER)''')
+
+# И при добавлении в форму вставки (INSERT) обязательно должно быть 5 значений:
+cursor.execute("INSERT INTO resumes (name, role, content, status, experience) VALUES (?, ?, ?, ?, ?)", 
+               (name, role, text, 'new', years))
     
     admin_password_hash = hash_password("admin123")
     cursor.execute("INSERT OR REPLACE INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
