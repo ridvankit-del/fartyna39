@@ -109,4 +109,4 @@ def calc_score(resume_text, role, experience):
     else: exp_multiplier = 1.0
     
     total_score = min(round(total_score * exp_multiplier), 100)
-    return {"total": total
+    return "total": total
