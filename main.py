@@ -55,26 +55,30 @@ if st.session_state.user_role is None:
                 st.session_state.user_role = data[1]
                 st.rerun()
             conn.close()
-    else:
-        key = st.text_input("Ключ администратора", type="password")
+    else: # Режим регистрации
+        admin_key = st.text_input("Ключ администратора", type="password")
+        # ВАЖНО: Определяем роль до кнопки, чтобы она всегда была видна интерпретатору
+        role = st.selectbox("Роль для нового пользователя", ["manager", "recruiter"])
+        
         if st.button("Регистрация"):
             conn = sqlite3.connect('talent_hub.db')
             c = conn.cursor()
-            # Проверяем, существует ли админ
+            # Проверка администратора
             c.execute("SELECT password_hash FROM users WHERE username='admin'")
-            admin_check = c.fetchone()
+            admin_data = c.fetchone()
             
-            if admin_check and hash_password(key) == admin_check[0]:
+            if admin_data and hash_password(admin_key) == admin_data[0]:
                 try:
+                    # Теперь role определена выше и гарантированно существует
                     c.execute("INSERT INTO users VALUES (?, ?, ?)", (user, hash_password(pwd), role))
                     conn.commit()
                     st.success("Пользователь успешно создан!")
                 except sqlite3.IntegrityError:
-                    st.error("Ошибка: Пользователь с таким логином уже существует!")
+                    st.error("Ошибка: Логин занят!")
             else:
                 st.error("Неверный ключ администратора!")
             conn.close()
-
+            
 # --- ПАНЕЛЬ УПРАВЛЕНИЯ ---
 st.sidebar.write(f"👤 Роль: **{st.session_state.user_role.upper()}**")
 if st.sidebar.button("Выйти"):
