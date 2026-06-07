@@ -144,9 +144,6 @@ if st.session_state.user_role in ['admin', 'recruiter']:
 if st.session_state.user_role in ['admin', 'manager']:
     st.header("📊 Коммерческий аналитический центр")
     
-    # Разделение интерфейса на вкладки
-    tab_crm, tab_metrics, tab_offers = st.tabs(["🎯 Воронка кандидатов (CRM)", "📈 Бизнес-метрики", "📄 Генератор офферов"])
-    
     conn = sqlite3.connect('talent_hub.db')
     df = pd.read_sql("SELECT * FROM resumes", conn)
     conn.close()
@@ -154,6 +151,9 @@ if st.session_state.user_role in ['admin', 'manager']:
     if not df.empty:
         # Считаем скоринг для всех кандидатов в фоне
         df['Score'] = df.apply(lambda x: analyze_candidate_score(x['content'], x['role'], x['experience'])['total'], axis=1)
+        
+        # Разделение интерфейса на вкладки
+        tab_crm, tab_metrics, tab_offers = st.tabs(["🎯 Воронка кандидатов (CRM)", "📈 Бизнес-метрики", "📄 Генератор офферов"])
         
         # ВКЛАДКА 1: Профессиональная воронка
         with tab_crm:
@@ -204,8 +204,6 @@ if st.session_state.user_role in ['admin', 'manager']:
             total_candidates = len(df)
             offers_count = len(df[df['status'] == "Оффер"])
             conversion = round((offers_count / total_candidates) * 100) if total_candidates > 0 else 0
-            
-            # Условная стоимость привлечения соискателя в ресторанной сфере
             estimated_cost = total_candidates * 1200 
             
             col_m1.metric("Всего обработано резюме", total_candidates)
@@ -224,17 +222,16 @@ if st.session_state.user_role in ['admin', 'manager']:
                 selected_candidate = st.selectbox("Выберите кандидата для формирования оффера:", offer_candidates['name'])
                 cand_row = df[df['name'] == selected_candidate].iloc[0]
                 
-                # Шаблон коммерческого оффера
                 offer_text = f"""
-                👋 Уважаемый(а) {cand_row['name']}!
+👋 Уважаемый(а) {cand_row['name']}!
                 
-                Команда ресторанной сети Blackwood Enterprise рада пригласить Вас на должность: **{cand_row['role']}**.
+Команда ресторанной сети Blackwood Enterprise рада пригласить Вас на должность: **{cand_row['role']}**.
                 
-                Наш ИИ-ассистент высоко оценил Ваш опыт работы ({cand_row['experience']} л.) и навыки. 
-                Мы предлагаем Вам конкурентные условия труда, официальное оформление и гибкий график.
+Наш ИИ-ассистент высоко оценил Ваш опыт работы ({cand_row['experience']} л.) и навыки. 
+Мы предлагаем Вам конкурентные условия труда, официальное оформление и гибкий график.
                 
-                Ожидаем Вашего ответа в течение 3 рабочих дней.
-                С уважением, HR-департамент Blackwood.
+Ожидаем Вашего ответа в течение 3 рабочих дней.
+С уважением, HR-департамент Blackwood.
                 """
                 st.info("Текст оффера сгенерирован автоматически:")
                 st.code(offer_text, language="markdown")
@@ -242,118 +239,4 @@ if st.session_state.user_role in ['admin', 'manager']:
                 st.info("Чтобы сгенерировать оффер, переведите хотя бы одного кандидата в статус 'Оффер' во вкладке CRM.")
                 
     else:
-        st.info("В коммерческой базе данных пока нет загруженных анкет соискателей.")            if skill.lower() in resume_text.lower():
-                # weight здесь — это число (например, 0.3)
-                total_score += weight * 100
-                details[f"{cat_name}: {skill}"] = round(weight * 100)
-            else:
-                details[f"{cat_name}: {skill}"] = 0
-    
-    # Расчет с учетом стажа
-    exp_multiplier = 1.3 if experience >= 5 else (1.1 if experience >= 2 else 1.0)
-    final_score = min(round(total_score * exp_multiplier), 100)
-    
-    return {"total": final_score, "details": details}
-
-init_db()
-
-# 4. СОСТОЯНИЕ
-if 'user_role' not in st.session_state:
-    st.session_state.user_role = None
-
-# 5. АВТОРИЗАЦИЯ
-if st.session_state.user_role is None:
-    st.title("🔐 Вход в систему")
-    mode = st.radio("Режим:", ["Вход", "Регистрация"], horizontal=True)
-    user = st.text_input("Логин")
-    pwd = st.text_input("Пароль", type="password")
-    
-    if mode == "Вход":
-        if st.button("Войти"):
-            conn = sqlite3.connect('talent_hub.db')
-            c = conn.cursor()
-            c.execute("SELECT password_hash, role FROM users WHERE username=?", (user,))
-            data = c.fetchone()
-            if data and hash_password(pwd) == data[0]:
-                st.session_state.user_role = data[1]
-                st.rerun()
-            else: st.error("Неверные данные")
-            conn.close()
-    else:
-        key = st.text_input("Ключ администратора", type="password")
-        role = st.selectbox("Роль", ["manager", "recruiter"])
-        if st.button("Зарегистрироваться"):
-            conn = sqlite3.connect('talent_hub.db')
-            c = conn.cursor()
-            c.execute("SELECT password_hash FROM users WHERE username='admin'")
-            admin_data = c.fetchone()
-            if admin_data and hash_password(key) == admin_data[0]:
-                try:
-                    c.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", (user, hash_password(pwd), role))
-                    conn.commit()
-                    st.success("Пользователь создан!")
-                except: st.error("Логин занят.")
-            else: st.error("Неверный ключ!")
-            conn.close()
-    st.stop()
-
-# 6. ИНТЕРФЕЙС
-st.sidebar.write(f"👤 Роль: **{st.session_state.user_role.upper()}**")
-if st.sidebar.button("Выйти"):
-    st.session_state.user_role = None
-    st.rerun()
-
-st.title(f"💼 Панель {st.session_state.user_role.upper()}")
-
-if st.session_state.user_role in ['admin', 'recruiter']:
-    st.header("📥 Добавить кандидата")
-    with st.form("resume_form"):
-        name = st.text_input("Имя")
-        role = st.selectbox("Должность", list(JOB_REQUIREMENTS.keys()))
-        years = st.number_input("Стаж (лет)", min_value=0, max_value=40)
-        text = st.text_area("Описание навыков")
-        if st.form_submit_button("Добавить"):
-            conn = sqlite3.connect('talent_hub.db')
-            c = conn.cursor()
-            c.execute("INSERT INTO resumes (name, role, content, status, experience) VALUES (?, ?, ?, ?, ?)", (name, role, text, 'new', years))
-            conn.commit()
-            conn.close()
-            st.success("Кандидат добавлен!")
-
-if st.session_state.user_role in ['admin', 'manager']:
-    st.header("📋 База кандидатов (HH-style)")
-    
-    conn = sqlite3.connect('talent_hub.db')
-    df = pd.read_sql("SELECT * FROM resumes", conn)
-    conn.close()
-    
-    if not df.empty:
-        # Считаем рейтинг для каждого
-        df['Score'] = df.apply(lambda x: analyze_candidate_score(x['content'], x['role'], x['experience'])['total'], axis=1)
-        
-        # Добавляем фильтр
-        selected_role = st.selectbox("Фильтр по должности", ["Все"] + list(JOB_REQUIREMENTS.keys()))
-        if selected_role != "Все":
-            df = df[df['role'] == selected_role]
-            
-        # Показываем таблицу
-        st.dataframe(df[['name', 'role', 'experience', 'Score']].sort_values(by='Score', ascending=False), use_container_width=True)
-    else:
-        st.info("База пуста.")
-    
-    if not df.empty:
-        for _, row in df.iterrows():
-            res = analyze_candidate_score(row['content'], row['role'], row['experience'])
-            with st.expander(f"{row['name']} | Рейтинг: {res['total']}%"):
-                col1, col2 = st.columns([2, 1])
-                col1.write(f"**Навыки:** {row['content']}")
-                for skill, val in res['details'].items():
-                    col2.write(f"{skill}:")
-                    col2.progress(val / 100)
-                if st.button("🗑️ Удалить", key=f"del_{row['id']}"):
-                    conn = sqlite3.connect('talent_hub.db')
-                    conn.execute("DELETE FROM resumes WHERE id=?", (row['id'],))
-                    conn.commit()
-                    conn.close()
-                    st.rerun()
-    else: st.info("Очередь пуста.")
+        st.info("В коммерческой базе данных пока нет загруженных анкет соискателей.")
