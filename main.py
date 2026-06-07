@@ -48,7 +48,7 @@ st.markdown("""
             margin-bottom: 10px;
         }
     </style>
-""", unsafe_allow_html=True)  # ТУТ ВСЁ ИСПРАВЛЕНО: лишняя скобка убрана
+""", unsafe_allow_html=True)
 
 # 2. РАСШИРЕННАЯ МАТРИЦА КОМПЕТЕНЦИЙ (HH-STYLE)
 JOB_REQUIREMENTS = {
@@ -113,7 +113,7 @@ def extract_text_from_file(uploaded_file):
 def calc_score(resume_text, role, experience):
     categories = JOB_REQUIREMENTS.get(role, {})
     if not categories:
-        return {"total": 0, "details": "Не удалось определить требования."}
+        return {"total": 0, "details": {}, "summary": "Не удалось определить требования."}
     
     total_score = 0
     details = {}
@@ -244,7 +244,7 @@ else:
     st.markdown('<p class="subtitle">AI Talent Hub & Кадровое планирование</p>', unsafe_allow_html=True)
     st.write("---")
     
-    # МОДУЛЬ 1: Умная загрузка резюме (Рекрутер + Админ)
+    # МОДУЛЬ 1: Умная загрузка резюме (Рекрутер + Admin)
     if st.session_state.user_role in ['admin', 'recruiter']:
         st.subheader("📥 Умный импорт соискателей (Поддержка PDF, DOCX)")
         
@@ -293,7 +293,11 @@ else:
             scores = []
             for _, r in df.iterrows():
                 res_analysis = calc_score(r['content'], r['role'], r['experience'])
-                scores.append(res_analysis['total'])
+                # Проверяем, вернулся ли корректный словарь (защита от багов)
+                if isinstance(res_analysis, dict) and 'total' in res_analysis:
+                    scores.append(res_analysis['total'])
+                else:
+                    scores.append(0)
             df['Score'] = scores
             
             tab_crm, tab_metrics, tab_offers = st.tabs(["🎯 CRM Воронка", "📈 Аналитика", "📄 Офферы"])
