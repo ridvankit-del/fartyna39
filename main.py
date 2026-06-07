@@ -5,7 +5,7 @@ import time
 import os
 from dotenv import load_dotenv
 
-# 1. ИНИЦИАЛИЗАЦИЯ И СТИЛИЗАЦИЯ ПОД Т-БАНК / WALL STREET
+# 1. ИНИЦИАЛИЗАЦИЯ
 load_dotenv()
 SECRET_KEY = os.getenv("STREAMLIT_SECRET_KEY", "default_fallback_key")
 
@@ -16,22 +16,74 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- МАКСИМАЛЬНАЯ АНОНИМНОСТЬ И ЖЕЛТО-ТЕМНЫЙ СТИЛЬ Т-БАНКА ---
-t_bank_style = """
+# --- PREMIUM INVESTMENT TERMINAL VISUAL STYLE (T-BANK / WALL STREET) ---
+premium_style = """
     <style>
-    /* Скрываем стандартный мусор Streamlit */
+    /* Отключаем элементы брендинга Streamlit */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     .viewerBadge_link__1S137 {display: none !important;}
     
-    /* Т-Банк кастомизация прогресс-бара и кнопок */
+    /* Стилизация главного фона и шрифтов */
+    html, body, [data-testid="stAppViewContainer"] {
+        background-color: #0B0B0C !important;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    }
+    
+    /* Эстетичные карточки с эффектом Glassmorphism */
+    [data-testid="stMetric"] {
+        background-color: #141416 !important;
+        border: 1px solid #232326 !important;
+        padding: 20px !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2) !important;
+    }
+    
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #141416 !important;
+        border: 1px solid #232326 !important;
+        border-radius: 16px !important;
+        padding: 25px !important;
+        margin-bottom: 20px !important;
+    }
+    
+    /* Кастомизация сайдбара */
+    [data-testid="stSidebar"] {
+        background-color: #0E0E10 !important;
+        border-right: 1px solid #232326 !important;
+    }
+    
+    /* Фирменный Т-Желтый прогресс-бар */
     .stProgress > div > div > div > div {
         background-color: #FFDD2D !important;
+        border-radius: 4px !important;
+    }
+    
+    /* Стилизация вкладок (Tabs) */
+    button[data-baseweb="tab"] {
+        color: #888888 !important;
+        font-size: 16px !important;
+        font-weight: 500 !important;
+        border: none !important;
+        transition: all 0.3s ease !important;
+    }
+    button[data-baseweb="tab"]:hover {
+        color: #FFDD2D !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #FFDD2D !important;
+        border-bottom: 2px solid #FFDD2D !important;
+    }
+    
+    /* Тонкая настройка шрифтов заголовков */
+    h1, h2, h3 {
+        font-weight: 600 !important;
+        letter-spacing: -0.5px !important;
     }
     </style>
 """
-st.markdown(t_bank_style, unsafe_allow_html=True)
+st.markdown(premium_style, unsafe_allow_html=True)
 
 if "last_request_time" not in st.session_state:
     st.session_state.last_request_time = 0.0
@@ -43,7 +95,7 @@ def check_rate_limit():
         st.stop()
     st.session_state.last_request_time = current_time
 
-# Квантовые модели
+# Математическое ядро терминала
 def predict_credit(hist, debt):
     score = (hist * 3.5) - (debt * 4.0) + 0.5
     return 1 / (1 + np.exp(-score))
@@ -53,116 +105,124 @@ def predict_housing(size, distance):
     return base_price + np.sin(size) * 3000.0
 
 
-# 2. ДИЗАЙН БОКОВОЙ ПАНЕЛИ TERMINAL CONTROL
+# 2. БОКОВОЙ ТЕРМИНАЛ (CONTROL PANEL)
 with st.sidebar:
-    # Логотип в стиле премиального банкинга
-    st.markdown("<h2 style='text-align: center; color: #FFDD2D; font-family: monospace; letter-spacing: 1px;'>👑 BLACKWOOD</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #888888; font-size: 11px; margin-top: -15px;'>QUANTITATIVE ANALYTICS SUITE</p>", unsafe_allow_html=True)
+    st.write("")
+    st.markdown("<h2 style='text-align: center; color: #FFDD2D; font-family: monospace; letter-spacing: 3px; font-size: 24px; margin-bottom: 0px;'>BLACKWOOD</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #555559; font-size: 10px; letter-spacing: 1px; margin-top: 2px;'>QUANTITATIVE ANALYTICS</p>", unsafe_allow_html=True)
     st.write("---")
     
-    st.markdown("##### 🌐 РЫНОЧНЫЙ ДЕПАРТАМЕНТ")
+    st.markdown("<p style='color: #888888; font-size: 12px; font-weight: bold; letter-spacing: 1px;'>GLOBAL MARKET RISK</p>", unsafe_allow_html=True)
     market_condition = st.slider(
         "Индекс волатильности (VIX)", 
         0.5, 1.5, 1.0, 0.1,
-        help="Макроэкономическая поправка на системные риски рынка."
+        label_visibility="collapsed",
+        help="Макроэкономическая коррекция на системные риски рынка."
     )
     
     st.write("---")
     if SECRET_KEY != "default_fallback_key":
-        st.markdown("<p style='color: #FFDD2D; font-size: 13px;'>🔒 <b>ЛИЦЕНЗИЯ:</b> ENTERPRISE TERMINAL</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #FFDD2D; font-size: 12px; letter-spacing: 0.5px;'>🔒 <b>STATUS:</b> ENTERPRISE NODE</p>", unsafe_allow_html=True)
     else:
-        st.markdown("<p style='color: #888888; font-size: 13px;'>🔓 <b>ЛИЦЕНЗИЯ:</b> COMMERCIAL PRIVATE MODE</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #555559; font-size: 12px; letter-spacing: 0.5px;'>🔓 <b>STATUS:</b> PRIVATE COMMERCIAL</p>", unsafe_allow_html=True)
 
 
-# 3. ВЕРХНИЕ ВКЛАДКИ-ТАБЫ (Центральный пульт)
-tab1, tab2 = st.tabs(["📊 Скоринг дебиторских рисков", "🏢 Ликвидность и Оценка недвижимости"])
+# 3. ЦЕНТРАЛЬНЫЙ ПУЛЬТ (ВКЛАДКИ)
+tab1, tab2 = st.tabs(["🏦 Кредитный риск-менеджмент", "🏢 Оценка материальных активов"])
 
 
-# --- ВКЛАДКА 1: КРЕДИТНЫЙ СКОРИНГ (WALL STREET / Т-БАНК EDITION) ---
+# --- ВКЛАДКА 1: КРЕДИТНЫЙ СКОРИНГ ---
 with tab1:
-    st.markdown("<h2 style='color: #FFDD2D;'>📊 Риск-менеджмент: Анализ андеррайтинга</h2>", unsafe_allow_html=True)
-    st.markdown("##### *Скоринговая матрица BQAS на основе взвешенных коэффициентов дефолта*")
-    st.write("---")
+    st.write("")
+    st.markdown("<h2 style='color: #FFF; font-size: 28px; margin-bottom: 5px;'>Риск-менеджмент: Верификация дебиторов</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #666; font-size: 14px;'>Мгновенный предиктивный скоринг контрагентов на базе скоринговых матриц Blackwood</p>", unsafe_allow_html=True)
+    st.write("")
     
     with st.container(border=True):
-        st.markdown("<p style='color: #FFDD2D; font-weight: bold;'>📝 МЕТРИКИ КОНТРАГЕНТА</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #FFDD2D; font-size: 13px; font-weight: bold; letter-spacing: 1px; margin-bottom: 15px;'>ВВОДНЫЕ ПАРАМЕТРЫ ЗАЁМЩИКА</p>", unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
-            hist = st.slider("Внутренний рейтинг скоринга", 0.0, 1.0, 0.7, 0.01, key="credit_hist")
+            st.caption("Внутренний кредитный рейтинг")
+            hist = st.slider("Кредитный рейтинг", 0.0, 1.0, 0.7, 0.01, key="credit_hist", label_visibility="collapsed")
         with col2:
-            debt = st.slider("Коэффициент долговой нагрузки (DTI)", 0.0, 1.0, 0.4, 0.01, key="credit_debt")
+            st.caption("Показатель долговой нагрузки (DTI)")
+            debt = st.slider("Долговая нагрузка", 0.0, 1.0, 0.4, 0.01, key="credit_debt", label_visibility="collapsed")
 
     check_rate_limit()
     
-    with st.spinner("Симуляция Монте-Карло..."):
+    with st.spinner("Расчет вектора дефолта..."):
         time.sleep(0.1)
         prob = (predict_credit(hist, debt) / market_condition) * 100
         prob = min(max(prob, 0.0), 100.0)
 
     st.write("")
-    res_col1, res_col2 = st.columns([1, 1.2])
+    res_col1, res_col2 = st.columns([1, 1.3])
     
     with res_col1:
-        st.markdown("<p style='font-size: 18px; font-weight: bold;'>🎯 КВАНТОВЫЙ ВЕРДИКТ</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 14px; font-weight: bold; color: #888; letter-spacing: 0.5px;'>АНАЛИТИЧЕСКИЙ ВЕРДИКТ</p>", unsafe_allow_html=True)
         with st.container(border=True):
-            st.metric(label="Вероятность исполнения обязательств", value=f"{prob:.2f}%")
+            st.metric(label="Индекс финансовой надежности", value=f"{prob:.2f}%")
+            st.write("")
             st.progress(int(prob))
             st.write("")
             if prob >= 50.0:
-                st.success("🟡 **СТАТУС: АКТИВ ОДОБРЕН** \n\nРекомендация: Включить в инвестиционный портфель.")
+                st.markdown("<div style='background-color: rgba(0, 244, 180, 0.1); border: 1px solid #00f4b4; padding: 15px; border-radius: 8px; color: #00f4b4; font-size: 14px;'><b>АКТИВ ОДОБРЕН</b><br>Низкая вероятность дефолта. Риски верифицированы.</div>", unsafe_allow_html=True)
             else:
-                st.error("🚨 **СТАТУС: ЛИКВИДАЦИОННЫЙ РИСК** \n\nРекомендация: Немедленный отказ (Шорт-позиция).")
+                st.markdown("<div style='background-color: rgba(255, 75, 75, 0.1); border: 1px solid #ff4b4b; padding: 15px; border-radius: 8px; color: #ff4b4b; font-size: 14px;'><b>ЛИКВИДАЦИОННЫЙ РИСК</b><br>Высокая долговая нагрузка. Операция заблокирована.</div>", unsafe_allow_html=True)
                 
     with res_col2:
-        st.markdown("<p style='font-size: 18px; font-weight: bold;'>📈 СТРЕСС-ТЕСТИРОВАНИЕ РЕЙТИНГА</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 14px; font-weight: bold; color: #888; letter-spacing: 0.5px;'>МОДЕЛИРОВАНИЕ СТРЕСС-ТЕСТА</p>", unsafe_allow_html=True)
         x_range = np.linspace(0.0, 1.0, 50)
         y_range = [min(max((predict_credit(x, debt) / market_condition) * 100, 0.0), 100.0) for x in x_range]
-        chart_data = pd.DataFrame({"Внутренний рейтинг": x_range, "Надежность %": y_range})
-        # Желтый фирменный график Т-Банка
-        st.line_chart(chart_data, x="Внутренний рейтинг", y="Надежность %", color="#FFDD2D")
+        chart_data = pd.DataFrame({"Рейтинг контрагента": x_range, "Надежность %": y_range})
+        st.line_chart(chart_data, x="Рейтинг контрагента", y="Надежность %", color="#FFDD2D")
 
 
 # --- ВКЛАДКА 2: НЕДВИЖИМОСТЬ ---
 with tab2:
-    st.markdown("<h2 style='color: #FFDD2D;'>🏢 Оценка и Анализ Реальных Активов</h2>", unsafe_allow_html=True)
-    st.markdown("##### *Предиктивная оценка залоговой стоимости имущества*")
-    st.write("---")
+    st.write("")
+    st.markdown("<h2 style='color: #FFF; font-size: 28px; margin-bottom: 5px;'>Аналитика реальных активов: Оценка FMV</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #666; font-size: 14px;'>Автоматический андеррайтинг залогового имущества и расчет долгосрочных ценовых трендов</p>", unsafe_allow_html=True)
+    st.write("")
     
     with st.container(border=True):
-        st.markdown("<p style='color: #FFDD2D; font-weight: bold;'>📐 ПАРАМЕТРЫ ОБЪЕКТА ЗАЛОГА</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #FFDD2D; font-size: 13px; font-weight: bold; letter-spacing: 1px; margin-bottom: 15px;'>СПЕЦИФИКАЦИЯ ОБЪЕКТА ОБЕСПЕЧЕНИЯ</p>", unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
-            size_input = st.slider("Полезная площадь (sq. m.)", 30, 150, 70, 1, key="house_size")
+            st.caption("Полезная внутренняя площадь (кв. м.)")
+            size_input = st.slider("Площадь", 30, 150, 70, 1, key="house_size", label_visibility="collapsed")
         with col2:
-            dist_input = st.slider("Дистанция до Центрального Хаба (км)", 1, 20, 5, 1, key="house_dist")
+            st.caption("Удаленность от центрального финансового хаба (км)")
+            dist_input = st.slider("Удаленность", 1, 20, 5, 1, key="house_dist", label_visibility="collapsed")
 
     check_rate_limit()
     
-    with st.spinner("Расчет индекса ликвидности..."):
+    with st.spinner("Сканирование закрытых сделок..."):
         time.sleep(0.1)
         current_price = max(predict_housing(size_input, dist_input) * market_condition, 15000.0)
 
     st.write("")
-    res_col1, res_col2 = st.columns([1, 1.2])
+    res_col1, res_col2 = st.columns([1, 1.3])
     
     with res_col1:
-        st.markdown("<p style='font-size: 18px; font-weight: bold;'>💰 СПРАВЕДЛИВАЯ СТОИМОСТЬ</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 14px; font-weight: bold; color: #888; letter-spacing: 0.5px;'>РАСЧЕТ СТОИМОСТИ</p>", unsafe_allow_html=True)
         with st.container(border=True):
-            st.metric(label="Fair Market Value (FMV)", value=f"${current_price:,.2f}")
+            st.metric(label="Fair Market Value (Справедливая цена)", value=f"${current_price:,.2f}")
             st.write("---")
-            st.write("📋 **Внутренний аудит Департамента:**")
-            st.write(f"• Оценка кв. метра: **${(current_price/size_input):.2f}**")
-            st.write(f"• Премия за локацию: **{-dist_input * 2000:+,}** к базовой ставке")
+            st.markdown("<p style='font-size: 12px; color: #AAA; font-weight: bold;'>АУДИТОРСКИЙ ОТЧЕТ</p>", unsafe_allow_html=True)
+            st.write(f"• Интегральная цена кв. м: **${(current_price/size_input):.2f}**")
+            st.write(f"• Влияние геолокации: **{-dist_input * 2000:+,}** к базовому пулу")
+            st.write("")
             
             if market_condition > 1.2:
-                st.warning("⚠️ Внимание: Локальный пузырь недвижимости.")
+                st.markdown("<div style='color: #ff9800; font-size: 13px;'>⚠️ <b>Внимание:</b> Модель фиксирует локальный перегрев сектора.</div>", unsafe_allow_html=True)
             elif market_condition < 0.8:
-                st.info("📉 Сигнал: Актив торгуется с дисконтом. Рекомендован выкуп.")
+                st.markdown("<div style='color: #00f4b4; font-size: 13px;'>📉 <b>Сигнал:</b> Обнаружен дисконт. Актив рекомендован к выкупу.</div>", unsafe_allow_html=True)
             else:
-                st.success("⚖️ Ценовые девиации отсутствуют.")
+                st.markdown("<div style='color: #888; font-size: 13px;'>⚖️ Девиации рынка находятся в пределах волатильности.</div>", unsafe_allow_html=True)
                 
     with res_col2:
-        st.markdown("<p style='font-size: 18px; font-weight: bold;'>🔮 ПРОГНОЗ ТРЕНДА ЦЕНЫ (5Y FORECAST)</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 14px; font-weight: bold; color: #888; letter-spacing: 0.5px;'>ИНВЕСТИЦИОННЫЙ ЦЕНОВОЙ ТРЕНД (5Y FORECAST)</p>", unsafe_allow_html=True)
         years = ["2026", "2027", "2028", "2029", "2030", "2031"]
         prices = [current_price]
         for i in range(1, 6):
@@ -171,5 +231,4 @@ with tab2:
             prices.append(max(next_price, 15000.0))
             
         forecast_data = pd.DataFrame({"Год": years, "Прогноз цен ($)": prices})
-        # Желто-золотой график распределения цены
         st.bar_chart(forecast_data, x="Год", y="Прогноз цен ($)", color="#FFDD2D")
