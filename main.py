@@ -60,12 +60,20 @@ if st.session_state.user_role is None:
         if st.button("Регистрация"):
             conn = sqlite3.connect('talent_hub.db')
             c = conn.cursor()
+            # Проверяем, существует ли админ
             c.execute("SELECT password_hash FROM users WHERE username='admin'")
-            if hash_password(key) == c.fetchone()[0]:
-                c.execute("INSERT INTO users VALUES (?, ?, ?)", (user, hash_password(pwd), "manager"))
-                conn.commit()
+            admin_check = c.fetchone()
+            
+            if admin_check and hash_password(key) == admin_check[0]:
+                try:
+                    c.execute("INSERT INTO users VALUES (?, ?, ?)", (user, hash_password(pwd), role))
+                    conn.commit()
+                    st.success("Пользователь успешно создан!")
+                except sqlite3.IntegrityError:
+                    st.error("Ошибка: Пользователь с таким логином уже существует!")
+            else:
+                st.error("Неверный ключ администратора!")
             conn.close()
-    st.stop()
 
 # --- ПАНЕЛЬ УПРАВЛЕНИЯ ---
 st.sidebar.write(f"👤 Роль: **{st.session_state.user_role.upper()}**")
