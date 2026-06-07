@@ -13,7 +13,7 @@ JOB_REQUIREMENTS = {
     "Официант": ["Знание меню", "Upsell", "Сервис", "POS"]
 }
 
-# 3. ФУНКЦИИ БД И БЕЗОПАСНОСТИ
+# 3. ФУНКЦИИ
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -39,10 +39,10 @@ init_db()
 # 4. СОСТОЯНИЕ
 if 'user_role' not in st.session_state: st.session_state.user_role = None
 
-# 5. АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ
+# 5. АВТОРИЗАЦИЯ
 if st.session_state.user_role is None:
-    st.title("🔐 Вход в систему Blackwood")
-    mode = st.radio("Действие:", ["Вход", "Регистрация"], horizontal=True)
+    st.title("🔐 Вход в систему")
+    mode = st.radio("Режим:", ["Вход", "Регистрация"], horizontal=True)
     user = st.text_input("Логин")
     pwd = st.text_input("Пароль", type="password")
     
@@ -58,39 +58,38 @@ if st.session_state.user_role is None:
             else: st.error("Неверные данные")
             conn.close()
     else:
-        admin_key = st.text_input("Ключ администратора", type="password")
-        role = st.selectbox("Роль нового сотрудника", ["manager", "recruiter"])
-        if st.button("Регистрация"):
+        key = st.text_input("Ключ администратора", type="password")
+        role = st.selectbox("Роль для нового пользователя", ["manager", "recruiter"])
+        if st.button("Зарегистрироваться"):
             conn = sqlite3.connect('talent_hub.db')
             c = conn.cursor()
             c.execute("SELECT password_hash FROM users WHERE username='admin'")
             admin_data = c.fetchone()
-            if admin_data and hash_password(admin_key) == admin_data[0]:
+            if admin_data and hash_password(key) == admin_data[0]:
                 try:
                     c.execute("INSERT INTO users VALUES (?, ?, ?)", (user, hash_password(pwd), role))
                     conn.commit()
                     st.success("Пользователь создан!")
-                except: st.error("Логин уже занят!")
-            else: st.error("Неверный ключ!")
+                except: st.error("Логин уже занят.")
+            else: st.error("Неверный ключ администратора!")
             conn.close()
     st.stop()
 
 # 6. ОСНОВНОЙ ИНТЕРФЕЙС
-st.sidebar.write(f"👤 Роль: **{st.session_state.user_role.upper() if st.session_state.user_role else 'Гость'}**")
+st.sidebar.write(f"👤 Роль: **{st.session_state.user_role.upper()}**")
 if st.sidebar.button("Выйти"):
     st.session_state.user_role = None
     st.rerun()
 
 st.title(f"💼 Панель: {st.session_state.user_role.upper()}")
 
-# Загрузка (Рекрутер + Админ)
 if st.session_state.user_role in ['admin', 'recruiter']:
-    st.subheader("📥 Загрузить резюме")
+    st.subheader("📥 Загрузка резюме")
     with st.form("resume_form"):
         name = st.text_input("Имя кандидата")
         role = st.selectbox("Должность", list(JOB_REQUIREMENTS.keys()))
-        text = st.text_area("Навыки и описание")
-        if st.form_submit_button("Добавить в базу"):
+        text = st.text_area("Описание навыков")
+        if st.form_submit_button("Добавить"):
             conn = sqlite3.connect('talent_hub.db')
             c = conn.cursor()
             c.execute("INSERT INTO resumes (name, role, content, status) VALUES (?, ?, ?, ?)", (name, role, text, 'new'))
@@ -98,8 +97,17 @@ if st.session_state.user_role in ['admin', 'recruiter']:
             conn.close()
             st.success("Кандидат добавлен!")
 
-# Аналитика (Менеджер + Админ)
 if st.session_state.user_role in ['admin', 'manager']:
     st.subheader("📊 Анализ кандидатов")
     conn = sqlite3.connect('talent_hub.db')
-    df = pd.
+    df = pd.read_sql("SELECT * FROM resumes WHERE status='new'", conn)
+    conn.close()
+    if not df.empty:
+        df['Score'] = df.apply(lambda x: analyze_candidate(x['content'], x['role']), axis=1)
+        df = df.sort_values(by='Score', ascending=False)
+        for _, row in df.iterrows():
+            col1, col2 = st.columns([3, 1])
+            col1.write(f"### {row['name']} | {row['role']}")
+            col1.write(f"Навыки: {row['content'][:50]}...")
+            col2.metric("Рейтинг", f"{row['Score']}%")
+            st.divider()
