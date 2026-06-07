@@ -6,11 +6,13 @@ import pandas as pd
 # 1. КОНФИГУРАЦИЯ СТРАНИЦЫ
 st.set_page_config(page_title="Blackwood AI HR", layout="wide")
 
-# 2. НАСТРОЙКИ AI - СПИСОК НАВЫКОВ
+# 2. НАСТРОЙКИ AI - ВЕСА НАВЫКОВ
+# Сумма весов для одной роли должна быть 1.0 (100%)
 JOB_REQUIREMENTS = {
-    "Повар": ["Тех. карты", "Санитарные нормы", "Работа с грилем", "Скорость"],
-    "Шеф-повар": ["Foodcost", "Разработка меню", "Управление командой", "Бюджетирование"],
-    "Официант": ["Знание меню", "Upsell", "Сервис", "POS"]
+    "Повар": {"Тех. карты": 0.3, "Санитарные нормы": 0.4, "Работа с грилем": 0.2, "Скорость": 0.1},
+    "Шеф-повар": {"Foodcost": 0.5, "Разработка меню": 0.3, "Управление командой": 0.2},
+    "Официант": {"Знание меню": 0.4, "Upsell": 0.3, "Сервис": 0.3}
+}
 }
 
 # 3. ФУНКЦИИ БЕЗОПАСНОСТИ И БД
@@ -33,10 +35,17 @@ def init_db():
     connection.close()
 
 def analyze_candidate_score(resume_text, role):
-    # Получаем требования для конкретной роли
-    required_skills = JOB_REQUIREMENTS.get(role, [])
-    if not required_skills:
+    requirements = JOB_REQUIREMENTS.get(role, {})
+    if not requirements:
         return 0
+    
+    score = 0
+    # Проходим по словарю: skill - навык, weight - его вес
+    for skill, weight in requirements.items():
+        if skill.lower() in resume_text.lower():
+            score += weight * 100
+            
+    return round(score)
     
     # Подсчитываем наличие ключевых слов в тексте
     found_count = 0
