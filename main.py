@@ -61,8 +61,59 @@ def ask_llm_analysis(resume_text, role, experience, requirements):
         return resp.json()['choices'][0]['message']['content'] if resp.status_code == 200 else "Ошибка API"
     except: return "Ошибка связи с ИИ"
 
-def calc_score(resume_text, role, experience):
-    cats = JOB_REQUIREMENTS.get(role, {})
+# 4. МОДАЛЬНОЕ ОКНО
+@st.dialog("📋 Живой ИИ-Анализ профиля")
+def show_candidate_modal(row):
+    st.write(f"### {row['name']}")
+    st.markdown(row['ai_summary'] if row['ai_summary'] else "Анализ не проводился.")
+    if st.button("Закрыть"): st.rerun()
+
+# 5. ОСНОВНОЙ ИНТЕРФЕЙС
+init_db()
+if 'user_role' not in st.session_state: st.session_state.user_role = None
+
+if st.session_state.user_role is None:
+    st.title("🔐 Авторизация Blackwood")
+    user = st.text_input("Логин")
+    pwd = st.text_input("Пароль", type="password")
+    if st.button("Войти"):
+        conn = sqlite3.connect('talent_hub.db')
+        c = conn.cursor()
+        c.execute("SELECT password_hash, role FROM users WHERE username=?", (user,))
+        data = c.fetchone()
+        if data and hash_password(pwd) == data[0]:
+            st.session_state.user_role = data[1]
+            st.rerun()
+        else: st.error("Неверные данные")
+        conn.close()
+else:
+    if st.sidebar.button("Выйти"): st.session_state.user_role = None; st.rerun()
+    
+    st.markdown('<p class="main-title">💼 BLACKWOOD ENTERPRISE</p>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">AI Talent Hub & Кадровое планирование</p>', unsafe_allow_html=True)
+    
+    # МОДУЛЬ 1: Рекрутинг
+    if check_access('recruiter'):
+        st.subheader("📥 Умный импорт соискателей")
+        uploaded_file = st.file_uploader("Загрузить файл", type=['pdf', 'docx'])
+        name = st.text_input("ФИО Кандидата")
+        role = st.selectbox("Вакансия", list(JOB_REQUIREMENTS.keys()))
+        years = st.number_input("Стаж", 0, 40)
+        
+        if st.button("Запустить ИИ-анализ"):
+            text = "Анализ текста из файла..."
+            with st.spinner("ИИ анализирует..."):
+                summary = ask_llm_analysis(text, role, years, "")
+                conn = sqlite3.connect('talent_hub.db')
+                conn.execute("INSERT INTO resumes (name, role, content, status, experience, ai_summary) VALUES (?,?,?,?,?,?)", 
+                             (name, role, text, 'Новый', years, summary))
+                conn.commit(); conn.close()
+                st.success("Кандидат добавлен!")
+
+    # МОДУЛЬ 2: CRM
+    if check_access('manager'):
+        st.subheader("📊 Аналитический центр и CRM")
+        conn    cats = JOB_REQUIREMENTS.get(role, {})
     total = 0
     details = {}
     for cat, skills in cats.items():
