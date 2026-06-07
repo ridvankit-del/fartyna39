@@ -1,3 +1,14 @@
+import streamlit as st
+import sqlite3
+import hashlib
+import pandas as pd
+import pypdf
+import docx2txt
+import io
+
+# 1. КОНФИГУРАЦИЯ СТРАНИЦЫ И СТИЛИ (PREMIUM DESIGN)
+st.set_page_config(page_title="Blackwood Enterprise AI HR", layout="wide")
+
 st.markdown("""
     <style>
         /* Главный заголовок */
@@ -37,7 +48,22 @@ st.markdown("""
             margin-bottom: 10px;
         }
     </style>
-""", unsafe_allow_html=True)}
+""", unsafe_allow_html=True)  # ТУТ ВСЁ ИСПРАВЛЕНО: лишняя скобка убрана
+
+# 2. РАСШИРЕННАЯ МАТРИЦА КОМПЕТЕНЦИЙ (HH-STYLE)
+JOB_REQUIREMENTS = {
+    "Повар": {
+        "Hard Skills": {"Тех. карты": 0.3, "Санитарные нормы": 0.4, "Работа с грилем": 0.2},
+        "Процессы": {"Скорость": 0.1}
+    },
+    "Шеф-повар": {
+        "Управление": {"Foodcost": 0.5, "Инвентаризация": 0.2, "Управление командой": 0.3}
+    },
+    "Официант": {
+        "Сервис": {"Знание меню": 0.4, "Стандарты сервиса": 0.3},
+        "Продажи": {"Upsell": 0.3}
+    }
+}
 
 VACANCIES_LIST = list(JOB_REQUIREMENTS.keys())
 
@@ -52,16 +78,9 @@ def init_db():
     cursor.execute('''CREATE TABLE IF NOT EXISTS resumes 
                       (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT, experience INTEGER, ai_summary TEXT)''')
     
-    # Миграция: добавляем новые колонки, если база уже существовала
     try:
         cursor.execute("ALTER TABLE resumes ADD COLUMN experience INTEGER")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE resumes ADD COLUMN ai_summary TEXT")
-    except sqlite3.OperationalError:
-        pass
-        
+    except sqlite3.OperationalError:        
     connection.commit()
     
     admin_password_hash = hash_password("admin123")
