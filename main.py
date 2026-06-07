@@ -1,4 +1,24 @@
-# --- 3. АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ (СМЕННАЯ ПОЗИЦИЯ) ---
+import streamlit as st
+import sqlite3
+import hashlib
+
+# 1. Сначала КОНФИГУРАЦИЯ страницы
+st.set_page_config(page_title="Blackwood HR System", layout="wide")
+
+# 2. ИНИЦИАЛИЗАЦИЯ базы данных
+def init_db():
+    # ... (твоя функция инициализации)
+    pass
+
+init_db()
+
+# 3. ТОЛЬКО ПОСЛЕ ЭТОГО инициализация session_state
+if 'user_role' not in st.session_state:
+    st.session_state.user_role = None
+
+# 4. И ТОЛЬКО ПОСЛЕ ВСЕГО ЭТОГО проверка
+if st.session_state.user_role is None:
+    # ... (логика входа)# --- 3. АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ (СМЕННАЯ ПОЗИЦИЯ) ---
 if st.session_state.user_role is None:
     st.title("🔐 Blackwood Access Portal")
     
