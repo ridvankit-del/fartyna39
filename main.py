@@ -6,7 +6,7 @@ import pandas as pd
 # 1. КОНФИГУРАЦИЯ
 st.set_page_config(page_title="Blackwood AI HR", layout="wide")
 
-# 2. НАСТРОЙКИ AI (С ВЕСАМИ)
+# 2. НАСТРОЙКИ AI
 JOB_REQUIREMENTS = {
     "Повар": {"Тех. карты": 0.3, "Санитарные нормы": 0.4, "Работа с грилем": 0.2, "Скорость": 0.1},
     "Шеф-повар": {"Foodcost": 0.5, "Разработка меню": 0.3, "Управление командой": 0.2},
@@ -20,16 +20,11 @@ def hash_password(password):
 def init_db():
     connection = sqlite3.connect('talent_hub.db')
     cursor = connection.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS resumes 
-                  (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT, experience INTEGER)''')
-
-# И при добавлении в форму вставки (INSERT) обязательно должно быть 5 значений:
-cursor.execute("INSERT INTO resumes (name, role, content, status, experience) VALUES (?, ?, ?, ?, ?)", 
-               (name, role, text, 'new', years))
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password_hash TEXT, role TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS resumes (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT, experience INTEGER)''')
     
     admin_password_hash = hash_password("admin123")
-    cursor.execute("INSERT OR REPLACE INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
-                   ("admin", admin_password_hash, "admin"))
+    cursor.execute("INSERT OR REPLACE INTO users (username, password_hash, role) VALUES (?, ?, ?)", ("admin", admin_password_hash, "admin"))
     connection.commit()
     connection.close()
 
@@ -47,7 +42,6 @@ def analyze_candidate_score(resume_text, role, experience):
         else:
             details[skill] = 0
             
-    # Логика стажа
     if experience >= 5: exp_multiplier = 1.3
     elif experience >= 2: exp_multiplier = 1.1
     else: exp_multiplier = 1.0
@@ -58,7 +52,8 @@ def analyze_candidate_score(resume_text, role, experience):
 init_db()
 
 # 4. СОСТОЯНИЕ
-if 'user_role' not in st.session_state: st.session_state.user_role = None
+if 'user_role' not in st.session_state:
+    st.session_state.user_role = None
 
 # 5. АВТОРИЗАЦИЯ
 if st.session_state.user_role is None:
@@ -80,7 +75,7 @@ if st.session_state.user_role is None:
             conn.close()
     else:
         key = st.text_input("Ключ администратора", type="password")
-        role = st.selectbox("Роль для нового пользователя", ["manager", "recruiter"])
+        role = st.selectbox("Роль", ["manager", "recruiter"])
         if st.button("Зарегистрироваться"):
             conn = sqlite3.connect('talent_hub.db')
             c = conn.cursor()
@@ -88,11 +83,10 @@ if st.session_state.user_role is None:
             admin_data = c.fetchone()
             if admin_data and hash_password(key) == admin_data[0]:
                 try:
-                    c.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
-                              (user, hash_password(pwd), role))
+                    c.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", (user, hash_password(pwd), role))
                     conn.commit()
                     st.success("Пользователь создан!")
-                except: st.error("Логин уже занят.")
+                except: st.error("Логин занят.")
             else: st.error("Неверный ключ!")
             conn.close()
     st.stop()
@@ -108,15 +102,14 @@ st.title(f"💼 Панель {st.session_state.user_role.upper()}")
 if st.session_state.user_role in ['admin', 'recruiter']:
     st.header("📥 Добавить кандидата")
     with st.form("resume_form"):
-        name = st.text_input("Имя кандидата")
+        name = st.text_input("Имя")
         role = st.selectbox("Должность", list(JOB_REQUIREMENTS.keys()))
-        years = st.number_input("Стаж работы (лет)", min_value=0, max_value=40)
+        years = st.number_input("Стаж (лет)", min_value=0, max_value=40)
         text = st.text_area("Описание навыков")
         if st.form_submit_button("Добавить"):
             conn = sqlite3.connect('talent_hub.db')
             c = conn.cursor()
-            c.execute("INSERT INTO resumes (name, role, content, status, experience) VALUES (?, ?, ?, ?, ?)", 
-                      (name, role, text, 'new', years))
+            c.execute("INSERT INTO resumes (name, role, content, status, experience) VALUES (?, ?, ?, ?, ?)", (name, role, text, 'new', years))
             conn.commit()
             conn.close()
             st.success("Кандидат добавлен!")
@@ -129,21 +122,17 @@ if st.session_state.user_role in ['admin', 'manager']:
     
     if not df.empty:
         for _, row in df.iterrows():
-            result = analyze_candidate_score(row['content'], row['role'], row['experience'])
-            score = result['total']
-            
-            with st.expander(f"{row['name']} | {row['role']} | Стаж: {row['experience']} л. | Рейтинг: {score}%"):
+            res = analyze_candidate_score(row['content'], row['role'], row['experience'])
+            with st.expander(f"{row['name']} | Рейтинг: {res['total']}%"):
                 col1, col2 = st.columns([2, 1])
                 col1.write(f"**Навыки:** {row['content']}")
-                for skill, val in result['details'].items():
+                for skill, val in res['details'].items():
                     col2.write(f"{skill}:")
                     col2.progress(val / 100)
-                
                 if st.button("🗑️ Удалить", key=f"del_{row['id']}"):
                     conn = sqlite3.connect('talent_hub.db')
                     conn.execute("DELETE FROM resumes WHERE id=?", (row['id'],))
                     conn.commit()
                     conn.close()
                     st.rerun()
-    else:
-        st.info("Нет резюме в очереди.")
+    else: st.info("Очередь пуста.")
