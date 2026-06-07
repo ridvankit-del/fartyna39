@@ -3,10 +3,17 @@ import sqlite3
 import hashlib
 import pandas as pd
 
-# 1. КОНФИГУРАЦИЯ СТРАНИЦЫ
-st.set_page_config(page_title="Blackwood HR System", layout="wide")
+# --- КОНФИГУРАЦИЯ ---
+st.set_page_config(page_title="Blackwood Talent AI", layout="wide")
 
-# 2. ИНИЦИАЛИЗАЦИЯ БД
+# --- БАЗОВЫЕ НАСТРОЙКИ АНАЛИЗА ---
+JOB_REQUIREMENTS = {
+    "Повар": ["Тех. карты", "Санитарные нормы", "Работа с грилем", "Скорость"],
+    "Шеф-повар": ["Foodcost", "Разработка меню", "Управление командой", "Бюджетирование"],
+    "Официант": ["Знание меню", "Upsell", "Сервис", "POS"]
+}
+
+# --- ФУНКЦИИ ---
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -21,17 +28,20 @@ def init_db():
     conn.commit()
     conn.close()
 
+def analyze_candidate(resume_text, role):
+    required = JOB_REQUIREMENTS.get(role, [])
+    if not required: return 0
+    score = sum(1 for skill in required if skill.lower() in resume_text.lower())
+    return round((score / len(required)) * 100)
+
 init_db()
 
-# 3. УПРАВЛЕНИЕ СОСТОЯНИЕМ
-if 'user_role' not in st.session_state:
-    st.session_state.user_role = None
+# --- АВТОРИЗАЦИЯ ---
+if 'user_role' not in st.session_state: st.session_state.user_role = None
 
-# 4. АВТОРИЗАЦИЯ
 if st.session_state.user_role is None:
-    st.title("🔐 Blackwood Access Portal")
-    mode = st.radio("Выберите действие:", ["Вход", "Регистрация (через админа)"], horizontal=True)
-    
+    st.title("🔐 Вход в систему")
+    mode = st.radio("Режим:", ["Вход", "Регистрация"], horizontal=True)
     user = st.text_input("Логин")
     pwd = st.text_input("Пароль", type="password")
     
@@ -44,51 +54,56 @@ if st.session_state.user_role is None:
             if data and hash_password(pwd) == data[0]:
                 st.session_state.user_role = data[1]
                 st.rerun()
-            else: st.error("Неверные данные")
             conn.close()
     else:
-        admin_key = st.text_input("Ключ администратора", type="password")
-        role = st.selectbox("Роль", ["manager", "recruiter"])
-        if st.button("Зарегистрироваться"):
+        key = st.text_input("Ключ администратора", type="password")
+        if st.button("Регистрация"):
             conn = sqlite3.connect('talent_hub.db')
             c = conn.cursor()
             c.execute("SELECT password_hash FROM users WHERE username='admin'")
-            admin_data = c.fetchone()
-            if admin_data and hash_password(admin_key) == admin_data[0]:
-                try:
-                    c.execute("INSERT INTO users VALUES (?, ?, ?)", (user, hash_password(pwd), role))
-                    conn.commit()
-                    st.success("Пользователь создан!")
-                except: st.error("Логин занят.")
-            else: st.error("Неверный ключ админа!")
+            if hash_password(key) == c.fetchone()[0]:
+                c.execute("INSERT INTO users VALUES (?, ?, ?)", (user, hash_password(pwd), "manager"))
+                conn.commit()
             conn.close()
     st.stop()
 
-# 5. ОСНОВНОЙ ИНТЕРФЕЙС
+# --- ПАНЕЛЬ УПРАВЛЕНИЯ ---
 st.sidebar.write(f"👤 Роль: **{st.session_state.user_role.upper()}**")
 if st.sidebar.button("Выйти"):
     st.session_state.user_role = None
     st.rerun()
 
-st.title(f"💼 Панель {st.session_state.user_role.upper()}")
+st.title("💼 Аналитика талантов Blackwood")
 
+# Раздел загрузки
 if st.session_state.user_role in ['admin', 'recruiter']:
-    st.subheader("📥 Загрузка резюме")
-    with st.form("resume_form"):
-        name = st.text_input("Имя кандидата")
-        role = st.selectbox("Должность", ["Повар", "Су-шеф", "Шеф-повар", "Менеджер", "Хостес", "Официант"])
-        text = st.text_area("Описание/Резюме")
-        if st.form_submit_button("Отправить"):
-            conn = sqlite3.connect('talent_hub.db')
-            c = conn.cursor()
-            c.execute("INSERT INTO resumes (name, role, content, status) VALUES (?, ?, ?, ?)", (name, role, text, 'new'))
-            conn.commit()
-            conn.close()
-            st.success("Отправлено!")
+    with st.expander("📥 Добавить кандидата"):
+        with st.form("add_resume"):
+            name = st.text_input("Имя")
+            role = st.selectbox("Должность", list(JOB_REQUIREMENTS.keys()))
+            text = st.text_area("Резюме (навыки)")
+            if st.form_submit_button("Анализировать"):
+                conn = sqlite3.connect('talent_hub.db')
+                c = conn.cursor()
+                c.execute("INSERT INTO resumes (name, role, content, status) VALUES (?, ?, ?, ?)", (name, role, text, 'new'))
+                conn.commit()
+                conn.close()
 
+# Раздел анализа (Топ лучших)
 if st.session_state.user_role in ['admin', 'manager']:
-    st.subheader("🔍 Очередь на проверку")
+    st.subheader("📊 Рэнкинг кандидатов")
     conn = sqlite3.connect('talent_hub.db')
     df = pd.read_sql("SELECT * FROM resumes WHERE status='new'", conn)
-    st.table(df)
     conn.close()
+    
+    if not df.empty:
+        df['Score'] = df.apply(lambda x: analyze_candidate(x['content'], x['role']), axis=1)
+        df = df.sort_values(by='Score', ascending=False)
+        
+        for _, row in df.iterrows():
+            col1, col2 = st.columns([3, 1])
+            color = "green" if row['Score'] > 70 else "orange" if row['Score'] > 30 else "red"
+            col1.write(f"### {row['name']} | {row['role']}")
+            col1.write(f"Навыки: {row['content'][:60]}...")
+            col2.metric("Рейтинг", f"{row['Score']}%")
+            st.divider()
