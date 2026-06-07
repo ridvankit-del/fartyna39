@@ -5,13 +5,14 @@ import pandas as pd
 import pypdf
 import docx2txt
 import io
+import requests
+import json
 
 # 1. КОНФИГУРАЦИЯ СТРАНИЦЫ И СТИЛИ (PREMIUM DESIGN)
 st.set_page_config(page_title="Blackwood Enterprise AI HR", layout="wide")
 
 st.markdown("""
     <style>
-        /* Главный заголовок */
         .main-title {
             font-size: 42px !important;
             font-weight: 800 !important;
@@ -25,13 +26,11 @@ st.markdown("""
             color: #666666;
             margin-bottom: 30px;
         }
-        /* Карточки метрик */
         div[data-testid="stMetricSimpleValue"] {
             font-size: 28px !important;
             font-weight: 700 !important;
             color: #111111;
         }
-        /* Брендированные контейнеры-карточки */
         .custom-card {
             background-color: #F9F9FB;
             padding: 20px;
@@ -39,13 +38,6 @@ st.markdown("""
             border-left: 5px solid #1E1E1E;
             box-shadow: 0 4px 6px rgba(0,0,0,0.02);
             margin-bottom: 15px;
-        }
-        .modal-card {
-            background-color: #F0F2F6;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #E0E0E0;
-            margin-bottom: 10px;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -67,7 +59,12 @@ JOB_REQUIREMENTS = {
 
 VACANCIES_LIST = list(JOB_REQUIREMENTS.keys())
 
-# 3. ФУНКЦИИ БЕЗОПАСНОСТИ, ПАРСИНГА И БД
+# 3. НАСТРОЙКИ LLM, БЕЗОПАСНОСТИ, ПАРСИНГА И БД
+# Вставь сюда свой ключ от OpenRouter
+OPENROUTER_API_KEY = "sk-or-v1-c3f...e8e
+·
+" 
+
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -77,7 +74,6 @@ def init_db():
     cursor.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password_hash TEXT, role TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS resumes 
                       (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT, experience INTEGER, ai_summary TEXT)''')
-    
     try:
         cursor.execute("ALTER TABLE resumes ADD COLUMN experience INTEGER")
     except sqlite3.OperationalError:
@@ -86,7 +82,6 @@ def init_db():
         cursor.execute("ALTER TABLE resumes ADD COLUMN ai_summary TEXT")
     except sqlite3.OperationalError:
         pass
-        
     connection.commit()
     
     admin_password_hash = hash_password("admin123")
@@ -110,53 +105,78 @@ def extract_text_from_file(uploaded_file):
         st.error(f"Ошибка при чтении файла: {e}")
     return ""
 
+def ask_llm_analysis(resume_text, role, experience, requirements):
+    """Отправляет запрос к настоящей ИИ-модели Llama 3 через OpenRouter"""
+    if not OPENROUTER_API_KEY or OPENROUTER_API_KEY == "ВСТАВЬ_СЮДА_СВОЙ_КЛЮЧ":
+        return "⚠️ Ошибка: API-ключ не настроен в коде приложения. Переключено на оффлайн-режим."
+
+    # Мощный системный промпт для разбора резюме
+    prompt = f"""
+    Ты — опытный ИИ-директор по персоналу ресторанной сети 'Blackwood Enterprise'.
+    Твоя задача — провести глубокий коммерческий аудит резюме кандидата.
+    
+    Вакансия: {role}
+    Заявленный стаж: {experience} лет.
+    Критерии идеального сотрудника: {json.dumps(requirements, ensure_ascii=False)}
+    
+    Текст резюме кандидата:
+    ---
+    {resume_text}
+    ---
+    
+    Напиши структурированный отчет на РУССКОМ языке в формате Markdown. Будь критичен и точен.
+    Структура отчета должна строго содержать:
+    1. ### 🤖 Настоящее ИИ-Заключение Blackwood (Итоговый вердикт: нанимаем/на интервью/отказ)
+    2. **Сильные стороны:** (Какие навыки и реальный опыт соответствуют ресторанной сфере)
+    3. **Скрытые риски и зоны роста:** (Чего не хватает, часто ли менял работу, есть ли несоответствия)
+    4. **Фактор стажа:** (Оценка опыта для данной позиции)
+    5. **Оценка соответствия:** (Укажи финальную общую оценку от 0 до 100% на основе твоего анализа)
+    """
+
+    try:
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            data=json.dumps({
+                "model": "meta-llama/llama-3-8b-instruct:free", # Используем бесплатную и быструю Llama 3
+                "messages": [{"role": "user", "content": prompt}]
+            }),
+            timeout=15
+        )
+        if response.status_code == 200:
+            result = response.json()
+            return result['choices'][0]['message']['content']
+        else:
+            return f"❌ Ошибка API ({response.status_code}): {response.text}"
+    except Exception as e:
+        return f"❌ Не удалось связаться с ИИ-сервером: {e}"
+
 def calc_score(resume_text, role, experience):
+    """Высчитывает математический скоринг по ключевым словам для графиков"""
     categories = JOB_REQUIREMENTS.get(role, {})
     if not categories:
-        return {"total": 0, "details": {}, "summary": "Не удалось определить требования."}
+        return {"total": 0, "details": {}}
     
     total_score = 0
     details = {}
-    found_skills = []
-    missing_skills = []
     
     for cat_name, skills in categories.items():
         for skill, weight in skills.items():
             if skill.lower() in resume_text.lower():
                 total_score += weight * 100
                 details[f"{cat_name}: {skill}"] = round(weight * 100)
-                found_skills.append(skill)
             else:
                 details[f"{cat_name}: {skill}"] = 0
-                missing_skills.append(skill)
             
     if experience >= 5: exp_multiplier = 1.3
     elif experience >= 2: exp_multiplier = 1.1
     else: exp_multiplier = 1.0
     
     total_score = min(round(total_score * exp_multiplier), 100)
-    
-    if total_score >= 70:
-        verdict = "🔥 СИЛЬНЫЙ КАНДИДАТ. Рекомендуется немедленное собеседование."
-    elif total_score >= 40:
-        verdict = "🟡 СРЕДНИЙ ПРОФИЛЬ. Стоит рассмотреть, если критичные навыки подтвердятся на интервью."
-    else:
-        verdict = "🔴 НИЗКОЕ СООТВЕТСТВИЕ. Профиль слабо подходит под жесткие критерии матрицы."
-
-    found_str = ", ".join(found_skills) if found_skills else "Не обнаружено"
-    missing_str = ", ".join(missing_skills) if missing_skills else "Все критерии соблюдены"
-
-    ai_summary = f"""### 🤖 ИИ-Заключение агента Blackwood
-**Вердикт:** {verdict}
-
-**Анализ компетенций:**
-* **Выявленные сильные стороны:** {found_str}.
-* **Зоны роста (чего не хватает в резюме):** {missing_str}.
-* **Фактор стажа:** Опыт работы ({experience} л.) дает коэффициент стабильности x{exp_multiplier}.
-
-*Рекомендация: Использовать данный отчет при первичном телефонном скрининге.*"""
-
-    return {"total": total_score, "details": details, "summary": ai_summary}
+    return {"total": total_score, "details": details}
 
 init_db()
 
@@ -165,20 +185,23 @@ if 'user_role' not in st.session_state:
     st.session_state.user_role = None
 
 # ВСПЛЫВАЮЩЕЕ МОДАЛЬНОЕ ОКНО ДЛЯ ПРОСМОТРА КАНДИДАТА
-@st.dialog("📋 ИИ-Аналитика профиля соискателя")
+@st.dialog("📋 Живой ИИ-Анализ профиля соискателя")
 def show_candidate_modal(row, res_details):
     st.write(f"### {row['name']}")
     st.write(f"**Вакансия:** {row['role']} | **Подтвержденный стаж:** {row['experience']} л.")
     st.write("---")
     
-    summary_text = row['ai_summary'] if row['ai_summary'] else res_details['summary']
-    st.markdown(summary_text)
+    # Показываем полноценный экспертный разбор от LLM нейросети
+    if row['ai_summary']:
+        st.markdown(row['ai_summary'])
+    else:
+        st.warning("Для этого кандидата еще не сформировано экспертное LLM-заключение.")
     st.write("---")
     
     st.markdown("**Выдержка из оригинального текста резюме:**")
-    st.info(row['content'][:1000] + ("..." if len(row['content']) > 1000 else ""))
+    st.info(row['content'][:800] + ("..." if len(row['content']) > 800 else ""))
     
-    st.markdown("**Метрики соответствия ИИ-матрице:**")
+    st.markdown("**Технические триггеры матрицы компетенций:**")
     for skill, val in res_details['details'].items():
         st.write(f"- {skill}: {val}%")
         st.progress(val / 100)
@@ -244,9 +267,9 @@ else:
     st.markdown('<p class="subtitle">AI Talent Hub & Кадровое планирование</p>', unsafe_allow_html=True)
     st.write("---")
     
-    # МОДУЛЬ 1: Умная загрузка резюме (Рекрутер + Admin)
+    # МОДУЛЬ 1: Умная загрузка резюме с LLM-анализом (Рекрутер + Admin)
     if st.session_state.user_role in ['admin', 'recruiter']:
-        st.subheader("📥 Умный импорт соискателей (Поддержка PDF, DOCX)")
+        st.subheader("📥 Умный импорт соискателей через нейросеть (PDF, DOCX)")
         
         uploaded_file = st.file_uploader("Перетащите файл резюме (.pdf, .docx)", type=['pdf', 'docx'])
         file_text = ""
@@ -261,21 +284,22 @@ else:
                 role = st.selectbox("Профильная вакансия", VACANCIES_LIST)
             with col2:
                 years = st.number_input("Подтвержденный стаж (лет)", min_value=0, max_value=40, value=0)
-                text = st.text_area("Текст резюме (заполнится автоматически при загрузке файла)", 
-                                    value=file_text if file_text else "", 
-                                    placeholder="Или вставьте текст вручную...")
+                text = st.text_area("Текст резюме", value=file_text if file_text else "", placeholder="Или вставьте текст вручную...")
                 
             if st.form_submit_button("🔥 Запустить ИИ-скрининг и добавить в воронку", use_container_width=True):
                 if name and text:
-                    analysis = calc_score(text, role, years)
+                    # Показываем спиннер загрузки, пока нейросеть думает над файлом
+                    with st.spinner("🤖 Настоящий ИИ читает резюме и формирует экспертное заключение... Подождите..."):
+                        reqs = JOB_REQUIREMENTS.get(role, {})
+                        ai_report = ask_llm_analysis(text, role, years, reqs)
                     
                     conn = sqlite3.connect('talent_hub.db')
                     c = conn.cursor()
                     c.execute("INSERT INTO resumes (name, role, content, status, experience, ai_summary) VALUES (?, ?, ?, ?, ?, ?)", 
-                              (name, role, text, 'Новый', years, analysis['summary']))
+                              (name, role, text, 'Новый', years, ai_report))
                     conn.commit()
                     conn.close()
-                    st.success(f"Кандидат {name} успешно проанализирован ИИ и добавлен!")
+                    st.success(f"Кандидат {name} успешно проанализирован LLM и сохранен в CRM!")
                     st.rerun()
                 else:
                     st.error("Пожалуйста, заполните ФИО кандидата и убедитесь, что текст резюме извлечен.")
@@ -293,7 +317,6 @@ else:
             scores = []
             for _, r in df.iterrows():
                 res_analysis = calc_score(r['content'], r['role'], r['experience'])
-                # Проверяем, вернулся ли корректный словарь (защита от багов)
                 if isinstance(res_analysis, dict) and 'total' in res_analysis:
                     scores.append(res_analysis['total'])
                 else:
