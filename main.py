@@ -1,11 +1,12 @@
 import streamlit as st
 import sqlite3
 import hashlib
+import pandas as pd
 
 # 1. КОНФИГУРАЦИЯ СТРАНИЦЫ
 st.set_page_config(page_title="Blackwood HR System", layout="wide")
 
-# 2. ИНИЦИАЛИЗАЦИЯ БД (Функции)
+# 2. ИНИЦИАЛИЗАЦИЯ БД
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -14,7 +15,6 @@ def init_db():
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password_hash TEXT, role TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS resumes (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT)''')
-    # Авто-создание админа, если пусто
     c.execute("SELECT * FROM users WHERE username='admin'")
     if not c.fetchone():
         c.execute("INSERT INTO users VALUES (?, ?, ?)", ("admin", hash_password("admin123"), "admin"))
@@ -27,7 +27,7 @@ init_db()
 if 'user_role' not in st.session_state:
     st.session_state.user_role = None
 
-# 4. АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ
+# 4. АВТОРИЗАЦИЯ
 if st.session_state.user_role is None:
     st.title("🔐 Blackwood Access Portal")
     mode = st.radio("Выберите действие:", ["Вход", "Регистрация (через админа)"], horizontal=True)
@@ -47,8 +47,8 @@ if st.session_state.user_role is None:
             else: st.error("Неверные данные")
             conn.close()
     else:
-        admin_key = st.text_input("Ключ администратора (пароль админа)", type="password")
-        role = st.selectbox("Роль для нового пользователя", ["manager", "recruiter"])
+        admin_key = st.text_input("Ключ администратора", type="password")
+        role = st.selectbox("Роль", ["manager", "recruiter"])
         if st.button("Зарегистрироваться"):
             conn = sqlite3.connect('talent_hub.db')
             c = conn.cursor()
@@ -64,7 +64,7 @@ if st.session_state.user_role is None:
             conn.close()
     st.stop()
 
-# 5. ОСНОВНОЙ ИНТЕРФЕЙС (после входа)
+# 5. ОСНОВНОЙ ИНТЕРФЕЙС
 st.sidebar.write(f"👤 Роль: **{st.session_state.user_role.upper()}**")
 if st.sidebar.button("Выйти"):
     st.session_state.user_role = None
@@ -72,7 +72,6 @@ if st.sidebar.button("Выйти"):
 
 st.title(f"💼 Панель {st.session_state.user_role.upper()}")
 
-# Логика по ролям
 if st.session_state.user_role in ['admin', 'recruiter']:
     st.subheader("📥 Загрузка резюме")
     with st.form("resume_form"):
@@ -90,8 +89,6 @@ if st.session_state.user_role in ['admin', 'recruiter']:
 if st.session_state.user_role in ['admin', 'manager']:
     st.subheader("🔍 Очередь на проверку")
     conn = sqlite3.connect('talent_hub.db')
-    import pandas as pd
     df = pd.read_sql("SELECT * FROM resumes WHERE status='new'", conn)
     st.table(df)
-    conn.close()            conn.close()
-    st.stop()
+    conn.close()
