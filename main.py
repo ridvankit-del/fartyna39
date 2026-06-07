@@ -145,12 +145,4 @@ if st.session_state.user_role in ['admin', 'manager']:
     st.header("📊 Коммерческий аналитический центр")
     
     conn = sqlite3.connect('talent_hub.db')
-    df = pd.read_sql("SELECT * FROM resumes", conn)
-    conn.close()
-    
-    if not df.empty:
-        # Считаем скоринг для всех кандидатов в фоне
-        df['Score'] = df.apply(lambda x: analyze_candidate_score(x['content'], x['role'], x['experience'])['total'], axis=1)
-        
-        # Разделение интерфейса на вкладки
-        tab_crm, tab_metrics, tab_offers = st.tabs(
+    df = pd.read_sql("SELECT * FROM
