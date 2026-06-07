@@ -93,4 +93,3 @@ elif app_mode == "🏡 Оценка недвижимости (Исправлен
     st.markdown("---")
     st.subheader("💰 Расчетная Стоимость от ИИ")
     st.metric(label="Прогнозная цена объекта", value=f"${max(final_price, 15000.0):,.2f}")
-    st.info(f"Коэффициент макроэкономики: {market_condition}x")
