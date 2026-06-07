@@ -1,63 +1,63 @@
 import streamlit as st
 import pandas as pd
 
-# Инициализация хранилища базы талантов
+# 1. СЛОВАРЬ ПРОФЕССИЙ И ЧЕК-ЛИСТОВ
+PROFESSION_CRITERIA = {
+    "Повар": ["Тех. карты", "Работа с грилем", "Санитарные нормы", "Скорость"],
+    "Су-шеф": ["Управление сменой", "Инвентаризация", "Контроль качества", "Обучение персонала"],
+    "Шеф-повар": ["Разработка меню", "Foodcost", "Управление командой", "Бюджетирование"],
+    "Менеджер": ["Работа с R-Keeper/iiko", "Кассовая дисциплина", "Управление конфликтами"],
+    "Хостес": ["Грамотная речь", "Внешний вид", "Бронирование", "Этикет"],
+    "Официант": ["Знание меню", "Upsell (продажи)", "Сервис", "Работа с POS-системами"]
+}
+
+# Инициализация базы
 if 'talent_db' not in st.session_state:
-    st.session_state.talent_db = {
-        "Data Science & AI": [],
-        "Fullstack Dev": [],
-        "Digital Marketing": [],
-        "Finance & Risk": []
-    }
+    st.session_state.talent_db = {prof: [] for prof in PROFESSION_CRITERIA.keys()}
 
-st.set_page_config(page_title="Blackwood Talent Hub", layout="wide")
+st.set_page_config(page_title="Blackwood Restaurant Talent", layout="wide")
 
-# CSS для карточек категорий
-st.markdown("""
-    <style>
-    .cat-card {background: #1C1C22; padding: 15px; border-radius: 10px; margin-bottom: 10px; border: 1px solid #333;}
-    </style>
-""", unsafe_allow_html=True)
+st.title("👨‍🍳 BLACKWOOD RESTAURANT TALENT HUB")
 
-st.title("🧠 BLACKWOOD TALENT HUB")
-
-# Боковая панель для навигации по категориям
+# 2. БОКОВАЯ ПАНЕЛЬ (Выбор и Добавление)
 with st.sidebar:
-    st.header("📂 Категории")
-    selected_cat = st.radio("Выберите направление:", list(st.session_state.talent_db.keys()))
+    selected_prof = st.selectbox("Выберите категорию:", list(PROFESSION_CRITERIA.keys()))
     
     st.divider()
-    st.subheader("📥 Добавить кандидата")
-    with st.form("add_candidate"):
-        name = st.text_input("Имя кандидата")
-        skills = st.text_input("Навыки (через запятую)")
-        submitted = st.form_submit_button("Добавить в базу")
-        if submitted and name:
-            st.session_state.talent_db[selected_cat].append({"Имя": name, "Навыки": skills})
-            st.success(f"Добавлен в {selected_cat}")
+    st.subheader("📥 Новый кандидат")
+    with st.form("add_cand"):
+        name = st.text_input("Имя")
+        exp_years = st.number_input("Стаж (лет)", 0, 30)
+        skills_input = st.text_area("Ключевые навыки (через запятую)")
+        if st.form_submit_button("Добавить"):
+            st.session_state.talent_db[selected_prof].append({
+                "Имя": name, 
+                "Стаж": exp_years, 
+                "Навыки": [s.strip() for s in skills_input.split(',')]
+            })
+            st.success("Добавлено")
 
-# Основная область анализа
-st.subheader(f"Анализ профилей: {selected_cat}")
+# 3. ОСНОВНАЯ ОБЛАСТЬ (Сравнительный анализ)
+st.subheader(f"Кандидаты: {selected_prof}")
+candidates = st.session_state.talent_db[selected_prof]
 
-# Вывод резюме в категории
-candidates = st.session_state.talent_db[selected_cat]
-if not candidates:
-    st.info("В этой категории пока нет резюме.")
-else:
+if candidates:
     for cand in candidates:
-        with st.container():
-            st.markdown(f"<div class='cat-card'>", unsafe_allow_html=True)
-            col1, col2 = st.columns([3, 1])
-            col1.write(f"### {cand['Имя']}")
-            col1.write(f"**Стек:** {cand['Навыки']}")
-            # Здесь будет кнопка для глубокого анализа
-            if col2.button("Анализ", key=cand['Имя']):
-                st.session_state.current_analysis = cand
-            st.markdown("</div>", unsafe_allow_html=True)
-
-# Окно детального анализа (если выбрано)
-if 'current_analysis' in st.session_state:
-    st.divider()
-    st.subheader(f"🔍 Глубокий разбор: {st.session_state.current_analysis['Имя']}")
-    # ИИ-логика для разбора конкретного кандидата
-    st.write("ИИ-аналитик изучает соответствие опыту...")
+        with st.container(border=True):
+            col1, col2, col3 = st.columns([2, 1, 1])
+            col1.write(f"### {cand['Имя']} (Стаж: {cand['Стаж']} лет)")
+            
+            # Логика AI-оценки соответствия
+            required_skills = PROFESSION_CRITERIA[selected_prof]
+            matches = [s for s in cand['Навыки'] if s in required_skills]
+            score = (len(matches) / len(required_skills)) * 100
+            
+            col2.metric("Соответствие", f"{score:.0f}%")
+            if score > 70:
+                col3.success("РЕКОМЕНДОВАН")
+            else:
+                col3.warning("ТРЕБУЕТ ДОП. ПРОВЕРКИ")
+            
+            st.write(f"**Сильные стороны:** {', '.join(matches)}")
+else:
+    st.info("Добавьте кандидатов в текущую категорию через боковую панель.")
