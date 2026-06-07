@@ -127,10 +127,25 @@ if st.session_state.user_role in ['admin', 'recruiter']:
             st.success("Кандидат добавлен!")
 
 if st.session_state.user_role in ['admin', 'manager']:
-    st.header("📊 Профессиональный анализ")
+    st.header("📋 База кандидатов (HH-style)")
+    
     conn = sqlite3.connect('talent_hub.db')
-    df = pd.read_sql("SELECT * FROM resumes WHERE status='new'", conn)
+    df = pd.read_sql("SELECT * FROM resumes", conn)
     conn.close()
+    
+    if not df.empty:
+        # Считаем рейтинг для каждого
+        df['Score'] = df.apply(lambda x: analyze_candidate_score(x['content'], x['role'], x['experience'])['total'], axis=1)
+        
+        # Добавляем фильтр
+        selected_role = st.selectbox("Фильтр по должности", ["Все"] + list(JOB_REQUIREMENTS.keys()))
+        if selected_role != "Все":
+            df = df[df['role'] == selected_role]
+            
+        # Показываем таблицу
+        st.dataframe(df[['name', 'role', 'experience', 'Score']].sort_values(by='Score', ascending=False), use_container_width=True)
+    else:
+        st.info("База пуста.")
     
     if not df.empty:
         for _, row in df.iterrows():
