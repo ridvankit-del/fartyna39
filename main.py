@@ -20,11 +20,23 @@ def hash_password(password):
 def init_db():
     connection = sqlite3.connect('talent_hub.db')
     cursor = connection.cursor()
+    # Создаем таблицы, если их нет
     cursor.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password_hash TEXT, role TEXT)''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS resumes (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT, experience INTEGER)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS resumes 
+                      (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT)''')
     
+    # ПРОВЕРКА И ОБНОВЛЕНИЕ: Добавляем колонку experience, если она отсутствует
+    try:
+        cursor.execute("ALTER TABLE resumes ADD COLUMN experience INTEGER")
+        connection.commit()
+    except sqlite3.OperationalError:
+        # Ошибка возникает, если колонка уже существует — это нормально, игнорируем
+        pass
+    
+    # Добавляем админа
     admin_password_hash = hash_password("admin123")
-    cursor.execute("INSERT OR REPLACE INTO users (username, password_hash, role) VALUES (?, ?, ?)", ("admin", admin_password_hash, "admin"))
+    cursor.execute("INSERT OR REPLACE INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
+                   ("admin", admin_password_hash, "admin"))
     connection.commit()
     connection.close()
 
