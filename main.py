@@ -78,7 +78,19 @@ if st.session_state.user_role is None:
             else:
                 st.error("Неверный ключ администратора!")
             conn.close()
-            
+
+# --- 5. ОСНОВНОЙ ИНТЕРФЕЙС ---
+# Проверяем, авторизован ли пользователь перед тем, как обращаться к его роли
+if st.session_state.user_role:
+    role_display = st.session_state.user_role.upper()
+    st.sidebar.write(f"👤 Роль: **{role_display}**")
+else:
+    st.sidebar.write("👤 Не авторизован")
+
+if st.sidebar.button("Выйти"):
+    st.session_state.user_role = None
+    st.rerun()
+    
 # --- ПАНЕЛЬ УПРАВЛЕНИЯ ---
 st.sidebar.write(f"👤 Роль: **{st.session_state.user_role.upper()}**")
 if st.sidebar.button("Выйти"):
