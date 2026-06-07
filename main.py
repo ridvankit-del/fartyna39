@@ -61,9 +61,7 @@ VACANCIES_LIST = list(JOB_REQUIREMENTS.keys())
 
 # 3. НАСТРОЙКИ LLM, БЕЗОПАСНОСТИ, ПАРСИНГА И БД
 # Вставь сюда свой ключ от OpenRouter
-OPENROUTER_API_KEY = "sk-or-v1-c3f...e8e"
-·
-" 
+OPENROUTER_API_KEY = "sk-or-v1-c3f...e8e" 
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
