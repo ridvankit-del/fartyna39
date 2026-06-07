@@ -100,6 +100,44 @@ def calc_score(resume_text, role, experience):
                 details[f"{cat_name}: {skill}"] = round(weight * 100)
             else:
                 details[f"{cat_name}: {skill}"] = 0
+VACANCIES_LIST = list(JOB_REQUIREMENTS.keys())
+
+# 3. ФУНКЦИИ БЕЗОПАСНОСТИ И БД
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def init_db():
+    connection = sqlite3.connect('talent_hub.db')
+    cursor = connection.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password_hash TEXT, role TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS resumes 
+                      (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT, experience INTEGER)''')
+    try:
+        cursor.execute("ALTER TABLE resumes ADD COLUMN experience INTEGER")
+        connection.commit()
+    except sqlite3.OperationalError:
+        pass
+
+    admin_password_hash = hash_password("admin123")
+    cursor.execute("INSERT OR REPLACE INTO users (username, password_hash, role) VALUES (?, ?, ?)", ("admin", admin_password_hash, "admin"))
+    connection.commit()
+    connection.close()
+
+def calc_score(resume_text, role, experience):
+    categories = JOB_REQUIREMENTS.get(role, {})
+    if not categories:
+        return {"total": 0, "details": {}}
+    
+    total_score = 0
+    details = {}
+    
+    for cat_name, skills in categories.items():
+        for skill, weight in skills.items():
+            if skill.lower() in resume_text.lower():
+                total_score += weight * 100
+                details[f"{cat_name}: {skill}"] = round(weight * 100)
+            else:
+                details[f"{cat_name}: {skill}"] = 0
             
     if experience >= 5: exp_multiplier = 1.3
     elif experience >= 2: exp_multiplier = 1.1
