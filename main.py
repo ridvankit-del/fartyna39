@@ -62,7 +62,7 @@ JOB_REQUIREMENTS = {
 VACANCIES_LIST = list(JOB_REQUIREMENTS.keys())
 
 # 3. НАСТРОЙКИ БЕЗОПАСНОСТИ, ПАРСИНГА И БД
-OPENROUTER_API_KEY = st.secrets.get "sk-or-v1-c3f...e8e"
+OPENROUTER_API_KEY = st.secrets.get("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")
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
