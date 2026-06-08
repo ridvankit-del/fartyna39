@@ -62,7 +62,7 @@ JOB_REQUIREMENTS = {
 VACANCIES_LIST = list(JOB_REQUIREMENTS.keys())
 
 # 3. НАСТРОЙКИ БЕЗОПАСНОСТИ, ПАРСИНГА И БД
-OPENROUTER_API_KEY = st.secrets.get("OPENROUTER_API_KEY")
+OPENROUTER_API_KEY = st.secrets.get("sk-or-v1-c3f...e8e)
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -86,7 +86,7 @@ def init_db():
     except sqlite3.OperationalError: pass
     
     connection.commit()
-    admin_password_hash = hash_password("admin123")
+    admin_password_hash = hash_password("9391291")
     cursor.execute("INSERT OR REPLACE INTO users (username, password_hash, role) VALUES (?, ?, ?)", ("admin", admin_password_hash, "admin"))
     connection.commit()
     connection.close()
