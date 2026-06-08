@@ -216,4 +216,5 @@ def show_candidate_modal(row):
                 st.info("Нет детальных метрик по навыкам.")
         except:
             st.error("Ошибка чтения сохраненной матрицы компетенций.")
-    else
+    else:
+        st.sidebar.image("https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=300&q=80", width="stretch")
