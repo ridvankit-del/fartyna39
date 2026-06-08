@@ -7,6 +7,7 @@ import docx2txt
 import io
 import requests
 import json
+import re
 
 # 1. КОНФИГУРАЦИЯ СТРАНИЦЫ И СТИЛИ (PREMIUM DESIGN)
 st.set_page_config(page_title="Blackwood Enterprise AI HR", layout="wide")
@@ -42,25 +43,25 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. РАСШИРЕННАЯ МАТРИЦА КОМПЕТЕНЦИЙ (HH-STYLE)
+# 2. РАСШИРЕННАЯ МАТРИЦА КОМПЕТЕНЦИЙ (HARD + SOFT)
 JOB_REQUIREMENTS = {
     "Повар": {
-        "Hard Skills": {"Тех. карты": 0.2, "Санитарные нормы": 0.3, "Работа с грилем": 0.2},
-        "Soft Skills": {"Чистоплотность": 0.2, "Дисциплина": 0.1}
+        "Hard Skills": ["Технологические карты", "Санитарные нормы (СанПиН)", "Работа с хоспером и грилем"],
+        "Soft Skills": ["Чистоплотность", "Выносливость", "Дисциплина"]
     },
     "Шеф-повар": {
-        "Управление": {"Foodcost": 0.4, "Инвентаризация": 0.2, "Управление командой": 0.2},
-        "Soft Skills": {"Лидерство": 0.1, "Стрессоустойчивость": 0.1}
+        "Hard Skills": ["Контроль Foodcost", "Инвентаризация", "Разработка меню"],
+        "Soft Skills": ["Лидерство", "Управление командой", "Стрессоустойчивость"]
     },
     "Официант": {
-        "Сервис": {"Знание меню": 0.3, "Стандарты сервиса": 0.3},
-        "Soft Skills": {"Коммуникабельность": 0.2, "Дружелюбие": 0.2}
+        "Hard Skills": ["Знание стандартов сервиса", "Работа с R-Keeper / iiko", "Техники Upsell продаж"],
+        "Soft Skills": ["Коммуникабельность", "Дружелюбие", "Грамотная речь"]
     }
 }
 
 VACANCIES_LIST = list(JOB_REQUIREMENTS.keys())
 
-# 3. НАСТРОЙКИ LLM, БЕЗОПАСНОСТИ, ПАРСИНГА И БД
+# 3. НАСТРОЙКИ БЕЗОПАСНОСТИ, ПАРСИНГА И БД
 OPENROUTER_API_KEY = st.secrets.get("OPENROUTER_API_KEY")
 
 def hash_password(password):
@@ -71,17 +72,20 @@ def init_db():
     cursor = connection.cursor()
     cursor.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password_hash TEXT, role TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS resumes 
-                      (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT, experience INTEGER, ai_summary TEXT)''')
-    try:
-        cursor.execute("ALTER TABLE resumes ADD COLUMN experience INTEGER")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE resumes ADD COLUMN ai_summary TEXT")
-    except sqlite3.OperationalError:
-        pass
-    connection.commit()
+                      (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT, experience INTEGER, 
+                       ai_summary TEXT, ai_score INTEGER, ai_skills_json TEXT)''')
     
+    # Плавная миграция базы данных под новые колонки умного ИИ-скоринга
+    try: cursor.execute("ALTER TABLE resumes ADD COLUMN experience INTEGER")
+    except sqlite3.OperationalError: pass
+    try: cursor.execute("ALTER TABLE resumes ADD COLUMN ai_summary TEXT")
+    except sqlite3.OperationalError: pass
+    try: cursor.execute("ALTER TABLE resumes ADD COLUMN ai_score INTEGER DEFAULT 0")
+    except sqlite3.OperationalError: pass
+    try: cursor.execute("ALTER TABLE resumes ADD COLUMN ai_skills_json TEXT")
+    except sqlite3.OperationalError: pass
+    
+    connection.commit()
     admin_password_hash = hash_password("admin123")
     cursor.execute("INSERT OR REPLACE INTO users (username, password_hash, role) VALUES (?, ?, ?)", ("admin", admin_password_hash, "admin"))
     connection.commit()
@@ -103,31 +107,47 @@ def extract_text_from_file(uploaded_file):
         st.error(f"Ошибка при чтении файла: {e}")
     return ""
 
-def ask_llm_analysis(resume_text, role, experience, requirements):
-    """Отправляет запрос к настоящей ИИ-модели Llama 3 через OpenRouter"""
+def ask_llm_semantic_analysis(resume_text, role, experience, requirements):
+    """Отправляет запрос к Llama 3 для глубокого контекстного анализа и семантического скоринга"""
     if not OPENROUTER_API_KEY:
-        return "⚠️ Ошибка: API-ключ не настроен в Secrets вашего Streamlit Cloud приложения. Переключено на оффлайн-режим."
+        return "⚠️ Ошибка: API-ключ не настроен.", 0, "{}"
+
+    # Собираем плоский список навыков, которые ИИ должен оценить в JSON
+    all_skills = requirements.get("Hard Skills", []) + requirements.get("Soft Skills", [])
+    skills_structure = {skill: 0 for skill in all_skills}
 
     prompt = f"""
     Ты — опытный ИИ-директор по персоналу ресторанной сети 'Blackwood Enterprise'.
-    Твоя задача — провести глубокий коммерческий аудит резюме кандидата.
+    Твоя задача — провести глубокий смысловой аудит резюме. Не цепляйся за точные слова. Если кандидат описал навык синонимами, своими словами, или с опечатками (например, "камуникабельныф" или "чистоплота") — пойми контекст и зачти это.
     
     Вакансия: {role}
     Заявленный стаж: {experience} лет.
-    Критерии идеального сотрудника: {json.dumps(requirements, ensure_ascii=False)}
+    Критерии идеального сотрудника:
+    - Hard Skills: {json.dumps(requirements.get("Hard Skills", []), ensure_ascii=False)}
+    - Soft Skills: {json.dumps(requirements.get("Soft Skills", []), ensure_ascii=False)}
     
     Текст резюме кандидата:
     ---
     {resume_text}
     ---
     
-    Напиши структурированный отчет на РУССКОМ языке в формате Markdown. Будь критичен и точен.
+    Напиши структурированный отчет на РУССКОМ языке в формате Markdown.
     Структура отчета должна строго содержать:
     1. ### 🤖 Настоящее ИИ-Заключение Blackwood (Итоговый вердикт: нанимаем/на интервью/отказ)
     2. **Сильные стороны:** (Какие навыки и реальный опыт соответствуют ресторанной сфере)
     3. **Скрытые риски и зоны роста:** (Чего не хватает, часто ли менял работу, есть ли несоответствия)
     4. **Фактор стажа:** (Оценка опыта для данной позиции)
-    5. **Оценка соответствия:** (Укажи финальную общую оценку от 0 до 100% на основе твоего анализа)
+    
+    В САМОМ КОНЦЕ ОТВЕТА, строго на новой строке, выведи технический блок с оценками в формате JSON внутри тегов [DATA]...[/DATA].
+    Оцени каждый навык из списка от 0 до 100 на основе контекста резюме. Высчитай общий средний рейтинг (score) от 0 до 100.
+    Шаблон технического блока:
+    [DATA]
+    {{
+      "score": 85,
+      "details": {json.dumps(skills_structure, ensure_ascii=False)}
+    }}
+    [/DATA]
+    Ничего кроме JSON внутри тегов [DATA] быть не должно. Навыки в "details" должны строго совпадать с переданным списком.
     """
 
     try:
@@ -144,36 +164,30 @@ def ask_llm_analysis(resume_text, role, experience, requirements):
             timeout=15
         )
         if response.status_code == 200:
-            result = response.json()
-            return result['choices'][0]['message']['content']
-        else:
-            return f"❌ Ошибка API ({response.status_code}): {response.text}"
-    except Exception as e:
-        return f"❌ Не удалось связаться с ИИ-сервером: {e}"
-
-def calc_score(resume_text, role, experience):
-    """Высчитывает математический скоринг по ключевым словам для графиков"""
-    categories = JOB_REQUIREMENTS.get(role, {})
-    if not categories:
-        return {"total": 0, "details": {}}
-    
-    total_score = 0
-    details = {}
-    
-    for cat_name, skills in categories.items():
-        for skill, weight in skills.items():
-            if skill.lower() in resume_text.lower():
-                total_score += weight * 100
-                details[f"{cat_name}: {skill}"] = round(weight * 100)
-            else:
-                details[f"{cat_name}: {skill}"] = 0
+            raw_content = response.json()['choices'][0]['message']['content']
             
-    if experience >= 5: exp_multiplier = 1.3
-    elif experience >= 2: exp_multiplier = 1.1
-    else: exp_multiplier = 1.0
-    
-    total_score = min(round(total_score * exp_multiplier), 100)
-    return {"total": total_score, "details": details}
+            # Извлекаем JSON-данные скоринга из тегов [DATA]
+            ai_report = raw_content
+            ai_score = 0
+            ai_skills_json = "{}"
+            
+            if "[DATA]" in raw_content and "[/DATA]" in raw_content:
+                try:
+                    parts = raw_content.split("[DATA]")
+                    ai_report = parts[0].strip()
+                    json_str = parts[1].split("[/DATA]")[0].strip()
+                    
+                    data_parsed = json.loads(json_str)
+                    ai_score = int(data_parsed.get("score", 0))
+                    ai_skills_json = json.dumps(data_parsed.get("details", {}), ensure_ascii=False)
+                except Exception as je:
+                    st.warning(f"Отрендерен текстовый отчет, но произошел сбой разбора метрик: {je}")
+            
+            return ai_report, ai_score, ai_skills_json
+        else:
+            return f"❌ Ошибка API ({response.status_code}): {response.text}", 0, "{}"
+    except Exception as e:
+        return f"❌ Не удалось связаться с ИИ-сервером: {e}", 0, "{}"
 
 init_db()
 
@@ -181,11 +195,11 @@ init_db()
 if 'user_role' not in st.session_state:
     st.session_state.user_role = None
 
-# ВСПЛЫВАЮЩЕЕ МОДАЛЬНОЕ ОКНО ДЛЯ ПРОСМОТРА КАНДИДАТА
-@st.dialog("📋 Живой ИИ-Анализ профиля соискателя")
-def show_candidate_modal(row, res_details):
+# МОДАЛЬНОЕ ОКНО ПРОСМОТРА КАНДИДАТА
+@st.dialog("📋 Контекстный ИИ-Анализ соискателя")
+def show_candidate_modal(row):
     st.write(f"### {row['name']}")
-    st.write(f"**Вакансия:** {row['role']} | **Подтвержденный стаж:** {row['experience']} л.")
+    st.write(f"**Вакансия:** {row['role']} | **Стаж:** {row['experience']} л.")
     st.write("---")
     
     if row['ai_summary']:
@@ -195,12 +209,23 @@ def show_candidate_modal(row, res_details):
     st.write("---")
     
     st.markdown("**Выдержка из оригинального текста резюме:**")
-    st.info(row['content'][:800] + ("..." if len(row['content']) > 800 else ""))
+    st.info(row['content'][:600] + ("..." if len(row['content']) > 600 else ""))
     
-    st.markdown("**Технические триггеры матрицы компетенций:**")
-    for skill, val in res_details['details'].items():
-        st.write(f"- {skill}: {val}%")
-        st.progress(val / 100)
+    # Выводим семантические метрики, которые посчитал ИИ
+    st.markdown("**📊 Семантический анализ соответствия требованиям:**")
+    if row['ai_skills_json']:
+        try:
+            skills_data = json.loads(row['ai_skills_json'])
+            if skills_data:
+                for skill, val in skills_data.items():
+                    st.write(f"- {skill}: **{val}%**")
+                    st.progress(int(val) / 100)
+            else:
+                st.info("Нет детальных метрик по навыкам.")
+        except:
+            st.error("Ошибка чтения сохраненной матрицы компетенций.")
+    else:
+        st.info("Кандидат был загружен в старой версии системы без поддержки глубокого скоринга.")
     st.write("---")
     
     if st.button("Закрыть просмотр", use_container_width=True):
@@ -260,10 +285,10 @@ else:
         st.rerun()
     
     st.markdown('<p class="main-title">💼 BLACKWOOD ENTERPRISE</p>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">AI Talent Hub & Кадровое планирование</p>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">AI Talent Hub & Контекстный Смысловой Анализ</p>', unsafe_allow_html=True)
     st.write("---")
     
-    # МОДУЛЬ 1: Умная загрузка резюме с LLM-анализом (Рекрутер + Admin)
+    # МОДУЛЬ 1: Умная загрузка резюме с семантическим ИИ-анализом
     if st.session_state.user_role in ['admin', 'recruiter']:
         st.subheader("📥 Умный импорт соискателей через нейросеть (PDF, DOCX)")
         
@@ -284,23 +309,24 @@ else:
                 
             if st.form_submit_button("🔥 Запустить ИИ-скрининг и добавить в воронку", use_container_width=True):
                 if name and text:
-                    with st.spinner("🤖 Настоящий ИИ читает резюме и формирует экспертное заключение... Подождите..."):
+                    with st.spinner("🤖 ИИ проводит смысловой аудит, сопоставляет синонимы и опечатки..."):
                         reqs = JOB_REQUIREMENTS.get(role, {})
-                        ai_report = ask_llm_analysis(text, role, years, reqs)
+                        ai_report, ai_score, ai_skills_json = ask_llm_semantic_analysis(text, role, years, reqs)
                     
                     conn = sqlite3.connect('talent_hub.db')
                     c = conn.cursor()
-                    c.execute("INSERT INTO resumes (name, role, content, status, experience, ai_summary) VALUES (?, ?, ?, ?, ?, ?)", 
-                              (name, role, text, 'Новый', years, ai_report))
+                    c.execute("""INSERT INTO resumes (name, role, content, status, experience, ai_summary, ai_score, ai_skills_json) 
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", 
+                              (name, role, text, 'Новый', years, ai_report, ai_score, ai_skills_json))
                     conn.commit()
                     conn.close()
-                    st.success(f"Кандидат {name} успешно проанализирован LLM и сохранен в CRM!")
+                    st.success(f"Кандидат {name} успешно проанализирован LLM и сохранен с ИИ-рейтингом {ai_score}%!")
                     st.rerun()
                 else:
-                    st.error("Пожалуйста, заполните ФИО кандидата и убедитесь, что текст резюме извлечен.")
+                    st.error("Пожалуйста, заполните ФИО кандидата и текст резюме.")
         st.write("---")
     
-    # МОДУЛЬ 2: Коммерческая аналитика и CRM (Менеджер + Админ)
+    # МОДУЛЬ 2: Коммерческая аналитика и CRM
     if st.session_state.user_role in ['admin', 'manager']:
         st.subheader("📊 Аналитический центр и CRM")
         
@@ -309,14 +335,8 @@ else:
         conn.close()
         
         if not df.empty:
-            scores = []
-            for _, r in df.iterrows():
-                res_analysis = calc_score(r['content'], r['role'], r['experience'])
-                if isinstance(res_analysis, dict) and 'total' in res_analysis:
-                    scores.append(res_analysis['total'])
-                else:
-                    scores.append(0)
-            df['Score'] = scores
+            # Заполняем пустые или старые скоринги нулями для стабильности графиков
+            df['ai_score'] = df['ai_score'].fillna(0).astype(int)
             
             tab_crm, tab_metrics, tab_offers = st.tabs(["🎯 CRM Воронка", "📈 Аналитика", "📄 Офферы"])
             allowed_statuses = ["Новый", "Собеседование", "Оффер", "Отказ"]
@@ -332,10 +352,9 @@ else:
                 
                 st.write("") 
                 
-                for _, row in filtered_df.sort_values(by='Score', ascending=False).iterrows():
-                    res_details = calc_score(row['content'], row['role'], row['experience'])
+                for _, row in filtered_df.sort_values(by='ai_score', ascending=False).iterrows():
                     current_status = row['normalized_status']
-                    score_color = "🟢" if row['Score'] >= 70 else ("🟡" if row['Score'] >= 40 else "🔴")
+                    score_color = "🟢" if row['ai_score'] >= 70 else ("🟡" if row['ai_score'] >= 40 else "🔴")
                     
                     with st.container():
                         col_img, col_main, col_btns = st.columns([1, 4, 2])
@@ -345,11 +364,11 @@ else:
                             
                         with col_main:
                             st.markdown(f"#### {score_color} {row['name']}")
-                            st.markdown(f"**Вакансия:** {row['role']} | **Текущий статус:** `{current_status}` | **ИИ-Матчинг:** {row['Score']}%")
+                            st.markdown(f"**Вакансия:** {row['role']} | **Текущий статус:** `{current_status}` | **Контекстный ИИ-Матчинг:** {row['ai_score']}%")
                             
                         with col_btns:
                             if st.button("👁️ Посмотреть профиль", key=f"view_{row['id']}", use_container_width=True):
-                                show_candidate_modal(row, res_details)
+                                show_candidate_modal(row)
                                 
                             new_status = st.selectbox("Изменить этап:", allowed_statuses, key=f"sel_{row['id']}", index=allowed_statuses.index(current_status))
                             
@@ -389,7 +408,7 @@ else:
                 
                 st.write("---")
                 st.markdown("### 📊 Распределение ИИ-рейтинга соискателей")
-                st.bar_chart(df['Score'])
+                st.bar_chart(df['ai_score'])
                 
             # ВКЛАДКА 3: Офферы
             with tab_offers:
