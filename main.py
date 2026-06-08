@@ -62,8 +62,6 @@ JOB_REQUIREMENTS = {
 VACANCIES_LIST = list(JOB_REQUIREMENTS.keys())
 
 # 3. НАСТРОЙКИ БЕЗОПАСНОСТИ, ПАРСИНГА И БД
-OPENROUTER_API_KEY = st.secrets.get("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")
-
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -86,7 +84,7 @@ def init_db():
     except sqlite3.OperationalError: pass
     
     connection.commit()
-    admin_password_hash = hash_password("9391291")
+    admin_password_hash = hash_password("admin123")
     cursor.execute("INSERT OR REPLACE INTO users (username, password_hash, role) VALUES (?, ?, ?)", ("admin", admin_password_hash, "admin"))
     connection.commit()
     connection.close()
@@ -107,10 +105,10 @@ def extract_text_from_file(uploaded_file):
         st.error(f"Ошибка при чтении файла: {e}")
     return ""
 
-def ask_llm_semantic_analysis(resume_text, role, experience, requirements):
+def ask_llm_semantic_analysis(resume_text, role, experience, requirements, api_key):
     """Отправляет запрос к Llama 3 для глубокого контекстного анализа и семантического скоринга"""
-    if not OPENROUTER_API_KEY:
-        return "⚠️ Ошибка: API-ключ не настроен.", 0, "{}"
+    if not api_key:
+        return "⚠️ Ошибка: API-ключ не настроен. Введите его в боковой панели или укажите в Secrets.", 0, "{}"
 
     # Собираем плоский список навыков, которые ИИ должен оценить в JSON
     all_skills = requirements.get("Hard Skills", []) + requirements.get("Soft Skills", [])
@@ -154,8 +152,10 @@ def ask_llm_semantic_analysis(resume_text, role, experience, requirements):
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
+                "HTTP-Referer": "https://localhost",
+                "X-Title": "Blackwood HR App"
             },
             data=json.dumps({
                 "model": "meta-llama/llama-3-8b-instruct:free",
@@ -231,31 +231,12 @@ def show_candidate_modal(row):
     if st.button("Закрыть просмотр", use_container_width=True):
         st.rerun()
 
-# 6. ОСНОВНОЙ БИЗНЕС-ИНТЕРФЕЙС
-else:
-    st.sidebar.image("https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=300&q=80", use_container_width=True)
-    st.sidebar.markdown("### 🏢 Панель управления")
-    st.sidebar.write(f"Пользователь: **{st.session_state.user_role.upper()}**")
+# 5. ЭКРАН АВТОРИЗАЦИИ
+if st.session_state.user_role is None:
+    st.image("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80", use_container_width=True)
+    st.markdown('<p class="main-title">🔐 Blackwood HR</p>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">Вход в корпоративную панель управления талантами</p>', unsafe_allow_html=True)
     
-    # --- НАЧАЛО БЛОКА ОТЛАДКИ КЛЮЧА ---
-    st.sidebar.markdown("---")
-    user_key_input = st.sidebar.text_input(
-        "🔑 Проверка API Ключа (при 401 ошибке)", 
-        type="password", 
-        placeholder="Вставьте sk-or-v1-...",
-        help="Если здесь пусто, система берет ключ из Secrets. Если вставить сюда — этот ключ заменит секреты."
-    )
-    # Если юзер ввел ключ руками — берем его, иначе берем из st.secrets
-    if user_key_input:
-        OPENROUTER_API_KEY = user_key_input
-    else:
-        OPENROUTER_API_KEY = st.secrets.get("OPENROUTER_API_KEY")
-    st.sidebar.markdown("---")
-    # --- КОНЕЦ БЛОКА ОТЛАДКИ КЛЮЧА ---
-    
-    if st.sidebar.button("🚪 Выйти из системы", key="sidebar_logout_btn", use_container_width=True):
-        st.session_state.user_role = None
-        st.rerun()
     mode = st.radio("Режим работы:", ["Вход", "Регистрация сотрудников"], horizontal=True)
     
     with st.container():
@@ -299,6 +280,22 @@ else:
     st.sidebar.markdown("### 🏢 Панель управления")
     st.sidebar.write(f"Пользователь: **{st.session_state.user_role.upper()}**")
     
+    # --- ДИНАМИЧЕСКИЙ БЛОК УПРАВЛЕНИЯ API КЛЮЧОМ ---
+    st.sidebar.markdown("---")
+    user_key_input = st.sidebar.text_input(
+        "🔑 Проверка API Ключа (при 401 ошибке)", 
+        type="password", 
+        placeholder="Вставьте sk-or-v1-...",
+        help="Если здесь пусто, система берет ключ из Secrets. Если вставить сюда — этот ключ заменит секреты."
+    )
+    
+    if user_key_input:
+        OPENROUTER_API_KEY = user_key_input
+    else:
+        OPENROUTER_API_KEY = st.secrets.get("OPENROUTER_API_KEY")
+    st.sidebar.markdown("---")
+    # --- КОНЕЦ БЛОКА УПРАВЛЕНИЯ API КЛЮЧОМ ---
+    
     if st.sidebar.button("🚪 Выйти из системы", key="sidebar_logout_btn", use_container_width=True):
         st.session_state.user_role = None
         st.rerun()
@@ -330,7 +327,7 @@ else:
                 if name and text:
                     with st.spinner("🤖 ИИ проводит смысловой аудит, сопоставляет синонимы и опечатки..."):
                         reqs = JOB_REQUIREMENTS.get(role, {})
-                        ai_report, ai_score, ai_skills_json = ask_llm_semantic_analysis(text, role, years, reqs)
+                        ai_report, ai_score, ai_skills_json = ask_llm_semantic_analysis(text, role, years, reqs, OPENROUTER_API_KEY)
                     
                     conn = sqlite3.connect('talent_hub.db')
                     c = conn.cursor()
