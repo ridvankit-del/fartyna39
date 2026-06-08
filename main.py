@@ -231,12 +231,31 @@ def show_candidate_modal(row):
     if st.button("Закрыть просмотр", use_container_width=True):
         st.rerun()
 
-# 5. ЭКРАН АВТОРИЗАЦИИ
-if st.session_state.user_role is None:
-    st.image("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80", use_container_width=True)
-    st.markdown('<p class="main-title">🔐 Blackwood HR</p>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">Вход в корпоративную панель управления талантами</p>', unsafe_allow_html=True)
+# 6. ОСНОВНОЙ БИЗНЕС-ИНТЕРФЕЙС
+else:
+    st.sidebar.image("https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=300&q=80", use_container_width=True)
+    st.sidebar.markdown("### 🏢 Панель управления")
+    st.sidebar.write(f"Пользователь: **{st.session_state.user_role.upper()}**")
     
+    # --- НАЧАЛО БЛОКА ОТЛАДКИ КЛЮЧА ---
+    st.sidebar.markdown("---")
+    user_key_input = st.sidebar.text_input(
+        "🔑 Проверка API Ключа (при 401 ошибке)", 
+        type="password", 
+        placeholder="Вставьте sk-or-v1-...",
+        help="Если здесь пусто, система берет ключ из Secrets. Если вставить сюда — этот ключ заменит секреты."
+    )
+    # Если юзер ввел ключ руками — берем его, иначе берем из st.secrets
+    if user_key_input:
+        OPENROUTER_API_KEY = user_key_input
+    else:
+        OPENROUTER_API_KEY = st.secrets.get("OPENROUTER_API_KEY")
+    st.sidebar.markdown("---")
+    # --- КОНЕЦ БЛОКА ОТЛАДКИ КЛЮЧА ---
+    
+    if st.sidebar.button("🚪 Выйти из системы", key="sidebar_logout_btn", use_container_width=True):
+        st.session_state.user_role = None
+        st.rerun()
     mode = st.radio("Режим работы:", ["Вход", "Регистрация сотрудников"], horizontal=True)
     
     with st.container():
