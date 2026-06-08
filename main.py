@@ -73,7 +73,6 @@ def init_db():
                       (id INTEGER PRIMARY KEY, name TEXT, role TEXT, content TEXT, status TEXT, experience INTEGER, 
                        ai_summary TEXT, ai_score INTEGER, ai_skills_json TEXT)''')
     
-    # Плавная миграция базы данных под новые колонки умного ИИ-скоринга
     try: cursor.execute("ALTER TABLE resumes ADD COLUMN experience INTEGER")
     except sqlite3.OperationalError: pass
     try: cursor.execute("ALTER TABLE resumes ADD COLUMN ai_summary TEXT")
@@ -106,17 +105,15 @@ def extract_text_from_file(uploaded_file):
     return ""
 
 def ask_llm_semantic_analysis(resume_text, role, experience, requirements, api_key):
-    """Отправляет запрос к Llama 3 для глубокого контекстного анализа и семантического скоринга"""
     if not api_key:
         return "⚠️ Ошибка: API-ключ не настроен. Введите его в боковой панели или укажите в Secrets.", 0, "{}"
 
-    # Собираем плоский список навыков, которые ИИ должен оценить в JSON
     all_skills = requirements.get("Hard Skills", []) + requirements.get("Soft Skills", [])
     skills_structure = {skill: 0 for skill in all_skills}
 
     prompt = f"""
     Ты — опытный ИИ-директор по персоналу ресторанной сети 'Blackwood Enterprise'.
-    Твоя задача — провести глубокий смысловой аудит резюме. Не цепляйся за точные слова. Если кандидат описал навык синонимами, своими словами, или с опечатками (например, "камуникабельныф" или "чистоплота") — пойми контекст и зачти это.
+    Твоя задача — провести глубокий смысловой аудит резюме. Не цепляйся за точные слова. Если кандидат описал навык синонимами, своими словами, или с опечатками — пойми контекст и зачти это.
     
     Вакансия: {role}
     Заявленный стаж: {experience} лет.
@@ -166,7 +163,6 @@ def ask_llm_semantic_analysis(resume_text, role, experience, requirements, api_k
         if response.status_code == 200:
             raw_content = response.json()['choices'][0]['message']['content']
             
-            # Извлекаем JSON-данные скоринга из тегов [DATA]
             ai_report = raw_content
             ai_score = 0
             ai_skills_json = "{}"
@@ -211,7 +207,6 @@ def show_candidate_modal(row):
     st.markdown("**Выдержка из оригинального текста резюме:**")
     st.info(row['content'][:600] + ("..." if len(row['content']) > 600 else ""))
     
-    # Выводим семантические метрики, которые посчитал ИИ
     st.markdown("**📊 Семантический анализ соответствия требованиям:**")
     if row['ai_skills_json']:
         try:
@@ -228,12 +223,12 @@ def show_candidate_modal(row):
         st.info("Кандидат был загружен в старой версии системы без поддержки глубокого скоринга.")
     st.write("---")
     
-    if st.button("Закрыть просмотр", use_container_width=True):
+    if st.button("Закрыть просмотр", width="stretch"):
         st.rerun()
 
 # 5. ЭКРАН АВТОРИЗАЦИИ
 if st.session_state.user_role is None:
-    st.image("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80", use_container_width=True)
+    st.image("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80", width="stretch")
     st.markdown('<p class="main-title">🔐 Blackwood HR</p>', unsafe_allow_html=True)
     st.markdown('<p class="subtitle">Вход в корпоративную панель управления талантами</p>', unsafe_allow_html=True)
     
@@ -244,7 +239,7 @@ if st.session_state.user_role is None:
         pwd = st.text_input("Пароль", type="password")
         
         if mode == "Вход":
-            if st.button("Войти в систему", use_container_width=True):
+            if st.button("Войти в систему", width="stretch"):
                 conn = sqlite3.connect('talent_hub.db')
                 c = conn.cursor()
                 c.execute("SELECT password_hash, role FROM users WHERE username=?", (user,))
@@ -258,7 +253,7 @@ if st.session_state.user_role is None:
         else:
             key = st.text_input("Ключ доступа (Пароль Администратора)", type="password")
             role = st.selectbox("Назначаемая роль", ["manager", "recruiter"])
-            if st.button("Зарегистрировать сотрудника", use_container_width=True):
+            if st.button("Зарегистрировать сотрудника", width="stretch"):
                 conn = sqlite3.connect('talent_hub.db')
                 c = conn.cursor()
                 c.execute("SELECT password_hash FROM users WHERE username='admin'")
@@ -276,11 +271,10 @@ if st.session_state.user_role is None:
 
 # 6. ОСНОВНОЙ БИЗНЕС-ИНТЕРФЕЙС
 else:
-    st.sidebar.image("https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=300&q=80", use_container_width=True)
+    st.sidebar.image("https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=300&q=80", width="stretch")
     st.sidebar.markdown("### 🏢 Панель управления")
     st.sidebar.write(f"Пользователь: **{st.session_state.user_role.upper()}**")
     
-    # --- ДИНАМИЧЕСКИЙ БЛОК УПРАВЛЕНИЯ API КЛЮЧОМ ---
     st.sidebar.markdown("---")
     user_key_input = st.sidebar.text_input(
         "🔑 Проверка API Ключа (при 401 ошибке)", 
@@ -294,9 +288,8 @@ else:
     else:
         OPENROUTER_API_KEY = st.secrets.get("OPENROUTER_API_KEY")
     st.sidebar.markdown("---")
-    # --- КОНЕЦ БЛОКА УПРАВЛЕНИЯ API КЛЮЧОМ ---
     
-    if st.sidebar.button("🚪 Выйти из системы", key="sidebar_logout_btn", use_container_width=True):
+    if st.sidebar.button("🚪 Выйти из системы", key="sidebar_logout_btn", width="stretch"):
         st.session_state.user_role = None
         st.rerun()
     
@@ -304,7 +297,7 @@ else:
     st.markdown('<p class="subtitle">AI Talent Hub & Контекстный Смысловой Анализ</p>', unsafe_allow_html=True)
     st.write("---")
     
-    # МОДУЛЬ 1: Умная загрузка резюме с семантическим ИИ-анализом
+    # МОДУЛЬ 1: Загрузка резюме
     if st.session_state.user_role in ['admin', 'recruiter']:
         st.subheader("📥 Умный импорт соискателей через нейросеть (PDF, DOCX)")
         
@@ -323,9 +316,9 @@ else:
                 years = st.number_input("Подтвержденный стаж (лет)", min_value=0, max_value=40, value=0)
                 text = st.text_area("Текст резюме", value=file_text if file_text else "", placeholder="Или вставьте текст вручную...")
                 
-            if st.form_submit_button("🔥 Запустить ИИ-скрининг и добавить в воронку", use_container_width=True):
+            if st.form_submit_button("🔥 Запустить ИИ-скрининг и добавить в воронку", width="stretch"):
                 if name and text:
-                    with st.spinner("🤖 ИИ проводит смысловой аудит, сопоставляет синонимы и опечатки..."):
+                    with st.spinner("🤖 ИИ проводит смысловой аудит..."):
                         reqs = JOB_REQUIREMENTS.get(role, {})
                         ai_report, ai_score, ai_skills_json = ask_llm_semantic_analysis(text, role, years, reqs, OPENROUTER_API_KEY)
                     
@@ -336,13 +329,13 @@ else:
                               (name, role, text, 'Новый', years, ai_report, ai_score, ai_skills_json))
                     conn.commit()
                     conn.close()
-                    st.success(f"Кандидат {name} успешно проанализирован LLM и сохранен с ИИ-рейтингом {ai_score}%!")
+                    st.success(f"Кандидат {name} успешно проанализирован LLM!")
                     st.rerun()
                 else:
                     st.error("Пожалуйста, заполните ФИО кандидата и текст резюме.")
         st.write("---")
     
-    # МОДУЛЬ 2: Коммерческая аналитика и CRM
+    # МОДУЛЬ 2: CRM
     if st.session_state.user_role in ['admin', 'manager']:
         st.subheader("📊 Аналитический центр и CRM")
         
@@ -351,13 +344,11 @@ else:
         conn.close()
         
         if not df.empty:
-            # Заполняем пустые или старые скоринги нулями для стабильности графиков
             df['ai_score'] = df['ai_score'].fillna(0).astype(int)
             
             tab_crm, tab_metrics, tab_offers = st.tabs(["🎯 CRM Воронка", "📈 Аналитика", "📄 Офферы"])
             allowed_statuses = ["Новый", "Собеседование", "Оффер", "Отказ"]
             
-            # ВКЛАДКА 1: Профессиональная CRM воронка
             with tab_crm:
                 col_f1, col_f2 = st.columns([1, 2])
                 with col_f1:
@@ -383,21 +374,21 @@ else:
                             st.markdown(f"**Вакансия:** {row['role']} | **Текущий статус:** `{current_status}` | **Контекстный ИИ-Матчинг:** {row['ai_score']}%")
                             
                         with col_btns:
-                            if st.button("👁️ Посмотреть профиль", key=f"view_{row['id']}", use_container_width=True):
+                            if st.button("👁️ Посмотреть профиль", key=f"view_{row['id']}", width="stretch"):
                                 show_candidate_modal(row)
                                 
                             new_status = st.selectbox("Изменить этап:", allowed_statuses, key=f"sel_{row['id']}", index=allowed_statuses.index(current_status))
                             
                             col_sub1, col_sub2 = st.columns(2)
                             with col_sub1:
-                                if st.button("💾 Сохранить", key=f"upd_{row['id']}", use_container_width=True):
+                                if st.button("💾 Сохранить", key=f"upd_{row['id']}", width="stretch"):
                                     conn = sqlite3.connect('talent_hub.db')
                                     conn.execute("UPDATE resumes SET status=? WHERE id=?", (new_status, row['id']))
                                     conn.commit()
                                     conn.close()
                                     st.rerun()
                             with col_sub2:
-                                if st.button("🗑️ Удалить", key=f"del_{row['id']}", use_container_width=True):
+                                if st.button("🗑️ Удалить", key=f"del_{row['id']}", width="stretch"):
                                     conn = sqlite3.connect('talent_hub.db')
                                     conn.execute("DELETE FROM resumes WHERE id=?", (row['id'],))
                                     conn.commit()
@@ -405,7 +396,6 @@ else:
                                     st.rerun()
                     st.markdown("---")
             
-            # ВКЛАДКА 2: Аналитика
             with tab_metrics:
                 st.write("")
                 col_m1, col_m2, col_m3 = st.columns(3)
@@ -426,7 +416,6 @@ else:
                 st.markdown("### 📊 Распределение ИИ-рейтинга соискателей")
                 st.bar_chart(df['ai_score'])
                 
-            # ВКЛАДКА 3: Офферы
             with tab_offers:
                 st.write("")
                 offer_candidates = df[df['normalized_status'] == "Оффер"]
@@ -450,6 +439,5 @@ else:
                     st.code(offer_text, language="markdown")
                 else:
                     st.info("Чтобы сгенерировать оффер, переведите хотя бы одного кандидата в статус 'Оффер' во вкладке CRM.")
-                    
         else:
             st.info("В коммерческой базе данных пока нет загруженных анкет соискателей.")
